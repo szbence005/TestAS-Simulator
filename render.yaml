@@ -13,6 +13,8 @@ services:
         generateValue: true
       - key: DATABASE_URL           # Neon-Connection-String
         sync: false
+      - key: ADMIN_EMAILS           # Admin-E-Mail(s), kommagetrennt – a Render-Dashboardon kell megadni
+        sync: false
       - key: GITHUB_CLIENT_ID
         sync: false
       - key: GITHUB_CLIENT_SECRET

@@ -3,6 +3,8 @@ import { createRng } from './src/rng.js';
 import { LETTERS } from './src/latin.js';
 import { SIZE, SHAPES, COLORS } from './src/figural.js';
 import * as Auth from './src/auth.js';
+import * as Groups from './src/groups.js';
+import { openAccountDialog, renderAdmin } from './src/admin.js';
 
 const app = document.getElementById('app');
 const isSEB = /SEB/i.test(navigator.userAgent);
@@ -498,6 +500,7 @@ if (isSEB) document.getElementById('auth-slot').insertAdjacentHTML('beforebegin'
 /* ------------------------------------------------------------------ Konto (Better Auth, optional) */
 let user = null;            // angemeldeter Nutzer oder null
 let authAvailable = false;
+let isAdmin = false;          // laut Server (ADMIN_EMAILS); nur für die Anzeige des Admin-Buttons, der Server prüft selbst
 let githubAvailable = false;  // false, wenn kein Auth-Server erreichbar ist (z. B. GitHub Pages)
 
 function renderAuthSlot() {
@@ -505,10 +508,13 @@ function renderAuthSlot() {
   const note = document.getElementById('foot-note');
   if (!authAvailable) { slot.innerHTML = ''; return; }
   slot.innerHTML = user
-    ? `<span class="who" title="${esc(user.email)}">${esc(user.name || user.email)}</span><button class="small" id="logout">Abmelden</button>`
+    ? `<span class="who" title="${esc(user.email)}">${esc(user.name || user.email)}</span>${isAdmin ? '<button class="small" id="admin">Admin</button>' : ''}<button class="small" id="account">Konto</button><button class="small" id="logout">Abmelden</button>`
     : '<button class="small" id="login">Anmelden</button>';
   note.textContent = 'Läuft im Browser. Ergebnisse werden lokal gespeichert, mit Konto zusätzlich auf dem Server.';
-  document.getElementById(user ? 'logout' : 'login').onclick = user ? logout : () => openAuthDialog();
+  if (!user) { document.getElementById('login').onclick = () => openAuthDialog(); return; }
+  document.getElementById('logout').onclick = logout;
+  document.getElementById('account').onclick = () => openAccountDialog(user);
+  if (isAdmin) document.getElementById('admin').onclick = () => { if (screen !== 'exam' && screen !== 'intro') renderAdmin({ app, setScreen, goHome: () => goHome() }); };
 }
 
 function refreshHistory() {
@@ -529,9 +535,17 @@ async function syncHistory() {
   await Auth.pushHistory(onlyLocal);
 }
 
+// Admin-Status vom Server holen (nur zur Anzeige)
+async function loadAccount() {
+  isAdmin = user ? Boolean((await Groups.getAccount())?.admin) : false;
+}
+
 async function logout() {
   await Auth.signOut();
   user = null;
+  isAdmin = false;
+  document.getElementById('account-dialog')?.remove();
+  if (screen === 'admin') renderHome();
   localStorage.removeItem(HISTORY_KEY); // auf geteilten Geräten keinen fremden Verlauf zurücklassen (liegt auf dem Server)
   renderAuthSlot();
   refreshHistory();
@@ -584,6 +598,7 @@ function openAuthDialog(mode = 'login') {
     const s = await Auth.getSession();
     user = s.user;
     dlg.close();
+    await loadAccount();
     renderAuthSlot();
     await syncHistory();
     refreshHistory();
@@ -613,6 +628,7 @@ Auth.getSession().then(async (s) => {
   authAvailable = s.available;
   user = s.user;
   if (authAvailable) githubAvailable = Boolean((await Auth.getConfig()).github);
+  await loadAccount();
   renderAuthSlot();
   await syncHistory();
   refreshHistory();

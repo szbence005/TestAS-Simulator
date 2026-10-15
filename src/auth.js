@@ -2,14 +2,14 @@
 // Auf einem rein statischen Host (z. B. GitHub Pages) gibt es diese Endpunkte nicht –
 // dann meldet getSession() { available: false } und die App läuft wie bisher nur lokal.
 
-async function call(path, options = {}) {
+export async function call(path, options = {}) {
   const res = await fetch(path, { credentials: 'same-origin', ...options });
   let data;
   try { data = await res.json(); } catch { data = undefined; } // keine JSON-Antwort
   return { ok: res.ok, status: res.status, data };
 }
 
-const post = (path, body) => call(path, {
+export const post = (path, body) => call(path, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),

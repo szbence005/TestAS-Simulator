@@ -209,3 +209,38 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .fm, .fq { width: 72px; height: 72px; }
   .topbar { top: 66px; }
 }
+
+/* ---------- Lerngruppen: Konto-Dialog und Admin-Ansicht */
+.row.nowrap { flex-wrap: nowrap; }
+.auth-form .row.nowrap { margin-top: 0; justify-content: flex-start; }
+.row.nowrap input { flex: 1; min-width: 0; }
+.grow { flex: 1; }
+a.btn { display: inline-block; text-decoration: none; }
+a.btn:hover { border-color: var(--accent); background: var(--surface-2); }
+.btn.small { padding: 5px 14px; font-size: .9rem; }
+button.link { border: 0; background: none; padding: 0; border-radius: 4px; font-weight: 600; text-align: left; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+button.link:hover { background: none; text-decoration-color: var(--accent); }
+.table-wrap { overflow-x: auto; padding: 8px 14px; }
+.table-wrap table { min-width: 560px; }
+.small-text { font-size: .8rem; }
+code, .code { font-family: var(--mono); font-size: .92em; }
+.code { color: var(--accent); font-weight: 700; letter-spacing: .04em; }
+.trend { font-size: 1.25rem; font-weight: 700; }
+.trend.up { color: var(--ok); } .trend.down { color: var(--bad); } .trend.flat { color: var(--muted); }
+.stats { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+.stats > div { display: flex; flex-direction: column; gap: 2px; min-width: 120px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 18px; }
+.stats .score { font-size: 2rem; line-height: 1.2; }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font: 11px var(--mono); }
+.chart .gl { stroke: var(--line); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: .85rem; color: var(--muted); }
+.legend svg { vertical-align: middle; }
+.grp-list { list-style: none; margin: 0; padding: 0; }
+.grp-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+label.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); margin: 12px 0 0; }
+label.check input { margin-top: 4px; }
+@media (max-width: 560px) {
+  #auth-slot { gap: 6px; }
+  #auth-slot button.small { padding: 5px 10px; font-size: .85rem; }
+}
+@media (max-width: 400px) { .brand span { display: none; } }

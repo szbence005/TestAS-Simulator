@@ -44,9 +44,27 @@ A bejelentkezés [Better Auth](https://www.better-auth.com)-ra épül (e-mail + 
 - `server/index.js` – statikus fájlok, `/api/auth/*`, `/api/history`
 - `src/auth.js` – kliens (sima `fetch`, nincs build)
 
-Környezeti változók: `BETTER_AUTH_SECRET` (éles üzemben kötelező, hosszú véletlen szöveg), `BETTER_AUTH_URL` (a nyilvános URL), `DB_PATH`, `PORT`. A Better Auth táblái induláskor automatikusan létrejönnek; ha ez nem sikerülne: `npm run auth:migrate` (= `npx auth@latest migrate --config server/auth.js -y`), majd indítsd újra a szervert.
+Környezeti változók: `BETTER_AUTH_SECRET` (éles üzemben kötelező, hosszú véletlen szöveg), `BETTER_AUTH_URL` (a nyilvános URL), `DB_PATH`, `PORT`, `ADMIN_EMAILS` (lásd lent: Lerngruppen). A Better Auth táblái induláskor automatikusan létrejönnek; ha ez nem sikerülne: `npm run auth:migrate` (= `npx auth@latest migrate --config server/auth.js -y`), majd indítsd újra a szervert.
 
 Ha az oldal **statikus hosztról** fut (pl. GitHub Pages), nincs auth szerver: a „Anmelden” gomb ilyenkor nem jelenik meg, és minden a böngésző `localStorage`-ában marad, mint korábban. Fiókokhoz Node-ot futtató hoszt kell (Render, Railway, Fly.io, saját VPS…).
+
+## Lerngruppen und Admin-Ansicht
+
+Ein Admin kann Gruppen anlegen; Teilnehmer treten mit einem Code bei, und der Admin sieht die Ergebnisse der Mitglieder. Das funktioniert nur mit Server (Render o. Ä.), nicht auf GitHub Pages.
+
+**Admin festlegen:** Umgebungsvariable `ADMIN_EMAILS` setzen (Render: Dashboard → Environment), z. B. `ADMIN_EMAILS=du@example.com`; mehrere Adressen mit Komma trennen. Konto mit genau dieser E-Mail-Adresse registrieren bzw. anmelden → in der Kopfzeile erscheint der Button **Admin**. Die Rolle kommt ausschließlich aus dieser Variable, sie wird nirgends in der Datenbank gespeichert.
+Wichtig: E-Mail-Adressen werden bei der Registrierung nicht bestätigt – das Admin-Konto daher gleich nach dem Setzen der Variable selbst anlegen.
+
+**Ablauf**
+
+1. Admin → *Neue Gruppe* → Name eingeben; der Beitrittscode (`XXXX-XXXX`) wird automatisch vergeben.
+2. Teilnehmer: anmelden → **Konto** → Code eingeben → Hinweis lesen, zustimmen → **Beitreten**. Austreten ist dort jederzeit möglich (der Admin kann Mitglieder auch entfernen).
+3. Admin → Gruppe öffnen: Tabelle mit Prüfungen/Übungen, Durchschnitt je Subtest, letzter Aktivität und Trend; Klick auf einen Namen zeigt den Verlauf (Diagramm + alle Ergebnisse). Zwei CSV-Exporte (Übersicht, alle Einzelergebnisse; Semikolon, Dezimalkomma, UTF-8 – öffnet direkt in Excel).
+
+**Datenschutz:** Beim Beitritt muss ausdrücklich zugestimmt werden (der Server verlangt die Zustimmung). Sichtbar sind Name, E-Mail und *alle* gespeicherten Ergebnisse des Mitglieds, auch frühere. Nur eingeloggt gespeicherte Ergebnisse existieren auf dem Server; wer nicht beigetreten ist, ist für den Admin unsichtbar. Bei Minderjährigen ggf. Einwilligung der Eltern einholen (DSGVO Art. 8; in Ungarn gilt die Altersgrenze 16).
+
+**Technik:** zwei neue Tabellen `study_groups` und `study_group_members` (werden beim Start angelegt; Postgres und SQLite), Logik in `server/groups.js` (API) und `server/stats.js` (Statistik, CSV, Codes – getestet in `test/groups.test.js`), Oberfläche in `src/admin.js`. Falsche Codes werden begrenzt (8 pro 15 Minuten und Nutzer).
+*Trend* = die letzten k Ergebnisse gegen die k davor (k ≤ 3, ab 4 Ergebnissen); ab ±3 Prozentpunkten gilt es als steigend/fallend. Die Ergebnisse speichern bisher nur die Punktzahl je Subtest, keine Aufschlüsselung nach Schwierigkeit.
 
 ## Telepítés GitHub Pages-re
 
@@ -70,7 +88,8 @@ A böngésző nem tud jegyzetelést megakadályozni – a „nincs jegyzet” sz
 ```
 index.html, style.css, app.js   felület (képernyők, időzítő, értékelés)
 src/auth.js                     bejelentkezés + előzmény-szinkron kliens
-server/                         Better Auth szerver (opcionális)
+server/                         Better Auth szerver (opcionális), csoportok API (groups.js), statisztika/CSV (stats.js)
+src/admin.js, src/groups.js     konto-párbeszédablak (csoportba lépés) és admin nézet
 src/rng.js                      seedelhető véletlenszám-generátor
 src/equations.js                egyenletrendszer-generátor (egyértelműséget ellenőrzi)
 src/latin.js                    latin négyzet generátor + következtetési-lépés számláló

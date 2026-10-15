@@ -1,5 +1,5 @@
 // Better Auth: Konten mit E-Mail + Passwort und optional GitHub, gespeichert in Postgres (DATABASE_URL) oder SQLite.
-// Umgebungsvariablen: BETTER_AUTH_SECRET, BETTER_AUTH_URL, DATABASE_URL, DB_PATH, PORT, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+// Umgebungsvariablen: BETTER_AUTH_SECRET, BETTER_AUTH_URL, DATABASE_URL, DB_PATH, PORT, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, ADMIN_EMAILS
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { betterAuth } from 'better-auth';
@@ -9,6 +9,7 @@ const COLS = 'ts, mode, type, correct, total, seconds, seed';
 
 let database;
 let history; // { list(uid), add(uid, rows) } – gleiche Schnittstelle für beide Datenbanken
+let sql;     // { all(text, params), run(text, params), bigint } – SQL mit ?-Platzhaltern für beide Datenbanken
 
 if (process.env.DATABASE_URL) {
   const { default: pg } = await import('pg');
@@ -18,6 +19,12 @@ if (process.env.DATABASE_URL) {
     correct INTEGER NOT NULL, total INTEGER NOT NULL, seconds INTEGER, seed INTEGER,
     PRIMARY KEY (user_id, ts, mode, type))`);
   database = pool;
+  const toPg = (text) => { let i = 0; return text.replace(/\?/g, () => `$${++i}`); };
+  sql = {
+    bigint: 'BIGINT',
+    async all(text, params = []) { return (await pool.query(toPg(text), params)).rows; },
+    async run(text, params = []) { return (await pool.query(toPg(text), params)).rowCount; },
+  };
   history = {
     async list(uid) {
       const r = await pool.query(`SELECT ${COLS} FROM history WHERE user_id = $1 ORDER BY ts DESC LIMIT 200`, [uid]);
@@ -48,13 +55,18 @@ if (process.env.DATABASE_URL) {
   const list = db.prepare(`SELECT ${COLS} FROM history WHERE user_id = ? ORDER BY ts DESC LIMIT 200`);
   const ins = db.prepare(`INSERT OR IGNORE INTO history (user_id, ${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   database = db;
+  sql = {
+    bigint: 'INTEGER',
+    async all(text, params = []) { return db.prepare(text).all(...params); },
+    async run(text, params = []) { return db.prepare(text).run(...params).changes; },
+  };
   history = {
     async list(uid) { return list.all(uid); },
     async add(uid, rows) { db.transaction(() => rows.forEach((e) => ins.run(uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null)))(); },
   };
 }
 
-export { history };
+export { history, sql };
 export const githubEnabled = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
 
 // Reihenfolge: eigene Angabe (z. B. eigene Domain) → von Render automatisch gesetzte URL → lokal.
