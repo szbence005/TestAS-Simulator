@@ -1,0 +1,334 @@
+import { buildExamSet, generateTask, TYPES, LEVELS, EXAM } from './src/tasks.js';
+import { createRng } from './src/rng.js';
+import { LETTERS } from './src/latin.js';
+
+const app = document.getElementById('app');
+const isSEB = /SEB/i.test(navigator.userAgent);
+const HISTORY_KEY = 'testas-sim-history-v1';
+
+const store = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* privater Modus o. Ä. */ } },
+};
+
+let screen = 'home';
+let S = null;   // Prüfungssitzung
+let P = null;   // Übungssitzung
+let timerId = null;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+const same = (a, b) => a !== null && a !== undefined && String(a) === String(b);
+const badges = () => `<span class="badge">inoffiziell</span> ${isSEB ? '<span class="badge seb">Safe Exam Browser erkannt</span>' : ''}`;
+
+/* ------------------------------------------------------------------ Aufgaben-HTML */
+function eqHTML(task) {
+  const lines = task.equations.map((e) => `<div>${esc(e).replace(/\b([A-D])\b/g, '<b>$1</b>')}</div>`).join('');
+  return `<div class="eqs">${lines}</div>`;
+}
+
+function latinGrid(task, { chosen = null, solved = false } = {}) {
+  const [qr, qc] = task.question;
+  let cells = '';
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) {
+    const given = task.grid[r][c];
+    if (r === qr && c === qc) {
+      const shown = solved ? task.answer : chosen;
+      cells += `<div class="q ${shown ? 'filled' : ''}" id="qcell">${shown ?? '?'}</div>`;
+    } else if (given !== null) cells += `<div>${given}</div>`;
+    else cells += solved ? `<div class="hint">${task.solution[r][c]}</div>` : '<div></div>';
+  }
+  return `<div class="latin" aria-label="5 mal 5 Raster">${cells}</div>`;
+}
+
+function taskHTML(task, { answer = null, reveal = false, interactive = true } = {}) {
+  if (task.type === 'gleichungen') {
+    return `${eqHTML(task)}
+      <p class="question">Welchem Wert entspricht <b>${task.question}</b>, damit die Gleichungen korrekt gelöst werden?</p>
+      <input id="ans" type="number" min="1" max="20" inputmode="numeric" autocomplete="off" aria-label="Antwort"
+        value="${answer ?? ''}" ${interactive ? '' : 'disabled'}>
+      ${reveal ? `<p class="muted">Lösung: ${Object.entries(task.solution).map(([k, v]) => `${k} = ${v}`).join(', ')}</p>` : ''}`;
+  }
+  const choices = LETTERS.map((l) => {
+    let cls = '';
+    if (reveal) cls = l === task.answer ? 'right' : (l === answer ? 'wrong' : '');
+    else if (l === answer) cls = 'sel';
+    return `<button data-letter="${l}" class="${cls}" ${interactive ? '' : 'disabled'} aria-label="Buchstabe ${l}">${l}</button>`;
+  }).join('');
+  return `<p class="question">Welcher Buchstabe gehört an die Stelle des Fragezeichens?</p>
+    <div class="latin-wrap">${latinGrid(task, { chosen: reveal ? null : answer, solved: reveal })}<div class="choices">${choices}</div></div>`;
+}
+
+// Eingaben der Aufgabe an einen Callback binden
+function bindTask(task, onAnswer, onEnter) {
+  if (task.type === 'gleichungen') {
+    const el = document.getElementById('ans');
+    if (!el || el.disabled) return;
+    el.addEventListener('input', () => onAnswer(el.value === '' ? null : Number(el.value)));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter?.(); } });
+    el.focus();
+  } else {
+    app.querySelectorAll('.choices button').forEach((b) => b.addEventListener('click', () => {
+      const l = b.dataset.letter;
+      app.querySelectorAll('.choices button').forEach((x) => x.classList.toggle('sel', x === b));
+      document.getElementById('qcell').textContent = l;
+      document.getElementById('qcell').classList.add('filled');
+      onAnswer(l);
+    }));
+  }
+}
+
+/* ------------------------------------------------------------------ Startseite */
+function renderHome() {
+  screen = 'home';
+  clearInterval(timerId);
+  const hist = store.get(HISTORY_KEY, []).slice(0, 8);
+  app.innerHTML = `
+    <h1>TestAS Simulator</h1>
+    <p class="muted">Übungs- und Prüfungssimulation für das Kernmodul (Mathematische Gleichungen, Lateinische Quadrate). ${badges()}</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2 style="margin-top:0">Prüfungsmodus</h2>
+        <p class="muted">Wie in der Prüfung: ${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, keine Rückmeldung bis zur Abgabe. Notizen sind nicht erlaubt.</p>
+        <label for="exam-type">Umfang</label>
+        <select id="exam-type">
+          <option value="both">Kernmodul-Simulation (beide Subtests nacheinander)</option>
+          <option value="gleichungen">Nur Mathematische Gleichungen</option>
+          <option value="quadrate">Nur Lateinische Quadrate</option>
+        </select>
+        <label for="seed">Seed (optional, für dieselbe Aufgabenreihe)</label>
+        <input id="seed" type="number" min="0" placeholder="zufällig">
+        <p><button class="primary" id="start-exam">Prüfung starten</button></p>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-top:0">Übungsmodus</h2>
+        <p class="muted">Unbegrenzt viele neue Aufgaben, sofortige Rückmeldung, ohne Zeitdruck.</p>
+        <label for="prac-type">Aufgabentyp</label>
+        <select id="prac-type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
+        <label for="prac-level">Schwierigkeit</label>
+        <select id="prac-level"><option value="gemischt">gemischt</option>${LEVELS.map((l) => `<option>${l}</option>`).join('')}</select>
+        <p><button class="primary" id="start-prac">Üben</button></p>
+      </section>
+    </div>
+
+    ${hist.length ? `<section class="card"><h2 style="margin-top:0">Letzte Ergebnisse</h2>
+      <table><thead><tr><th>Datum</th><th>Modus</th><th>Typ</th><th>Ergebnis</th></tr></thead><tbody>
+      ${hist.map((h) => `<tr><td>${esc(new Date(h.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
+        <td>${h.mode === 'exam' ? 'Prüfung' : 'Übung'}</td><td>${esc(TYPES[h.type]?.label ?? h.type)}</td>
+        <td>${h.correct}/${h.total}${h.seconds ? ` · ${fmt(h.seconds * 1000)}` : ''}${h.seed != null ? ` · Seed ${h.seed}` : ''}</td></tr>`).join('')}
+      </tbody></table></section>` : ''}
+    <p class="muted">Inoffizielles Übungsprojekt, nicht mit der g.a.s.t. / dem TestDaF-Institut verbunden. Alle Aufgaben werden selbst generiert.</p>`;
+
+  document.getElementById('start-exam').onclick = () => {
+    const seedRaw = document.getElementById('seed').value;
+    startExam(document.getElementById('exam-type').value, seedRaw === '' ? null : Number(seedRaw));
+  };
+  document.getElementById('start-prac').onclick = () =>
+    startPractice(document.getElementById('prac-type').value, document.getElementById('prac-level').value);
+}
+
+/* ------------------------------------------------------------------ Prüfung */
+function startExam(kind, seed) {
+  const useSeed = Number.isFinite(seed) && seed !== null ? seed : Math.floor(Math.random() * 1e9);
+  const types = kind === 'both' ? ['gleichungen', 'quadrate'] : [kind];
+  app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
+  setTimeout(() => {
+    S = {
+      seed: useSeed, si: 0,
+      sections: types.map((type) => {
+        const tasks = buildExamSet(type, useSeed);
+        return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, limitMs: EXAM.minutes * 60000 };
+      }),
+    };
+    renderIntro();
+  }, 30);
+}
+
+const INSTRUCTIONS = {
+  gleichungen: `<p>Sie sehen Gleichungssysteme. Bestimmen Sie, welche Zahlen für die Buchstaben eingesetzt werden müssen, damit alle Gleichungen stimmen.</p>
+    <p>Jeder Buchstabe hat genau eine Lösung zwischen <b>1</b> und <b>20</b>. Geben Sie den Wert des gefragten Buchstabens ein.</p>`,
+  quadrate: `<p>Sie sehen ein Raster mit 5 Zeilen und 5 Spalten. Es kommen nur die Buchstaben A–E vor. Jeder Buchstabe darf in jeder Zeile und jeder Spalte nur <b>einmal</b> vorkommen.</p>
+    <p>Bestimmen Sie den Buchstaben, der an die Stelle des Fragezeichens gehört. Manchmal müssen Sie dazu im Kopf zuerst andere Felder füllen.</p>`,
+};
+
+function renderIntro() {
+  screen = 'intro';
+  const sec = S.sections[S.si];
+  app.innerHTML = `<h1>${TYPES[sec.type].label}</h1><p class="muted">Subtest ${S.si + 1} von ${S.sections.length} ${badges()}</p>
+    <section class="card">${INSTRUCTIONS[sec.type]}
+      <p>Sie haben <b>${EXAM.count} Aufgaben</b> und <b>${EXAM.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
+      <p class="muted">Tastatur: ← → blättern, bei Quadraten A–E wählen, bei Gleichungen Enter = weiter.</p>
+      <p><button class="primary" id="go">Subtest starten</button> <button id="abort">Abbrechen</button></p></section>`;
+  document.getElementById('go').onclick = () => { sec.startedAt = Date.now(); startTimer(); renderExam(); };
+  document.getElementById('abort').onclick = () => { S = null; renderHome(); };
+}
+
+function startTimer() {
+  clearInterval(timerId);
+  timerId = setInterval(() => {
+    const sec = S.sections[S.si];
+    const left = sec.limitMs - (Date.now() - sec.startedAt);
+    const el = document.getElementById('timer');
+    if (el) { el.textContent = fmt(left); el.classList.toggle('low', left < 5 * 60000); }
+    if (left <= 0) finishSection(true);
+  }, 250);
+}
+
+function renderExam() {
+  screen = 'exam';
+  const sec = S.sections[S.si];
+  const t = sec.tasks[sec.i];
+  const left = sec.limitMs - (Date.now() - sec.startedAt);
+  app.innerHTML = `
+    <div class="topbar">
+      <div><b>${TYPES[sec.type].label}</b> · Aufgabe ${sec.i + 1}/${sec.tasks.length}</div>
+      <div class="timer ${left < 5 * 60000 ? 'low' : ''}" id="timer" role="timer">${fmt(left)}</div>
+      <button class="danger" id="submit">Abgeben</button>
+    </div>
+    <div class="nav" id="nav">${sec.tasks.map((_, k) => `<button data-k="${k}" aria-label="Aufgabe ${k + 1}">${k + 1}</button>`).join('')}</div>
+    <section class="card task" id="task">${taskHTML(t, { answer: sec.answers[sec.i] })}</section>
+    <div class="row spread">
+      <button id="prev" ${sec.i === 0 ? 'disabled' : ''}>‹ Zurück</button>
+      <button id="flag">${sec.flags[sec.i] ? 'Markierung entfernen' : 'Markieren'}</button>
+      <button id="next" class="primary" ${sec.i === sec.tasks.length - 1 ? 'disabled' : ''}>Weiter ›</button>
+    </div>`;
+  paintNav();
+  document.getElementById('prev').onclick = () => go(sec.i - 1);
+  document.getElementById('next').onclick = () => go(sec.i + 1);
+  document.getElementById('flag').onclick = () => { sec.flags[sec.i] = !sec.flags[sec.i]; document.getElementById('flag').textContent = sec.flags[sec.i] ? 'Markierung entfernen' : 'Markieren'; paintNav(); };
+  document.getElementById('submit').onclick = () => {
+    const open = sec.answers.filter((a) => a === null).length;
+    if (confirm(open ? `Noch ${open} Aufgabe(n) unbeantwortet. Subtest wirklich abgeben?` : 'Subtest jetzt abgeben?')) finishSection(false);
+  };
+  document.getElementById('nav').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (b) go(Number(b.dataset.k)); };
+  bindTask(t, (a) => { sec.answers[sec.i] = a; paintNav(); }, () => go(sec.i + 1));
+}
+
+function paintNav() {
+  const sec = S.sections[S.si];
+  document.querySelectorAll('#nav button').forEach((b) => {
+    const k = Number(b.dataset.k);
+    b.className = [sec.answers[k] !== null ? 'answered' : '', sec.flags[k] ? 'flagged' : '', k === sec.i ? 'current' : ''].join(' ').trim();
+  });
+}
+
+function go(k) {
+  const sec = S.sections[S.si];
+  if (k < 0 || k >= sec.tasks.length) return;
+  sec.i = k;
+  renderExam();
+}
+
+function finishSection(auto) {
+  clearInterval(timerId);
+  const sec = S.sections[S.si];
+  sec.endedAt = Date.now();
+  sec.auto = auto;
+  if (S.si < S.sections.length - 1) {
+    screen = 'between';
+    app.innerHTML = `<section class="card"><h1>Subtest beendet</h1>
+      <p>${auto ? 'Die Zeit ist abgelaufen.' : 'Abgegeben.'} Es folgt der nächste Subtest: <b>${TYPES[S.sections[S.si + 1].type].label}</b>.</p>
+      <p><button class="primary" id="cont">Weiter</button></p></section>`;
+    document.getElementById('cont').onclick = () => { S.si++; renderIntro(); };
+  } else renderResult();
+}
+
+/* ------------------------------------------------------------------ Ergebnis */
+function renderResult() {
+  screen = 'result';
+  const history = store.get(HISTORY_KEY, []);
+  let html = `<h1>Ergebnis</h1><p class="muted">Seed ${S.seed} – mit diesem Seed erhalten Sie dieselben Aufgaben noch einmal. ${badges()}</p>`;
+  for (const sec of S.sections) {
+    const correct = sec.tasks.filter((t, k) => same(sec.answers[k], t.answer)).length;
+    const seconds = Math.min(Math.round((sec.endedAt - sec.startedAt) / 1000), sec.limitMs / 1000);
+    history.unshift({ ts: Date.now(), mode: 'exam', type: sec.type, correct, total: sec.tasks.length, seconds, seed: S.seed });
+    const byLevel = LEVELS.map((l) => {
+      const ts = sec.tasks.map((t, k) => ({ t, k })).filter((x) => x.t.level === l);
+      return `<tr><td>${l}</td><td>${ts.filter((x) => same(sec.answers[x.k], x.t.answer)).length} / ${ts.length}</td></tr>`;
+    }).join('');
+    html += `<section class="card"><h2 style="margin-top:0">${TYPES[sec.type].label}</h2>
+      <div class="score">${correct} / ${sec.tasks.length}</div>
+      <p class="muted">Zeit: ${fmt(seconds * 1000)} von ${EXAM.minutes}:00${sec.auto ? ' (Zeit abgelaufen)' : ''} · unbeantwortet: ${sec.answers.filter((a) => a === null).length}</p>
+      <table><thead><tr><th>Schwierigkeit</th><th>Richtig</th></tr></thead><tbody>${byLevel}</tbody></table>
+      <h2>Auswertung der Aufgaben</h2>
+      ${sec.tasks.map((t, k) => {
+        const ok = same(sec.answers[k], t.answer);
+        return `<details><summary>${ok ? '✔' : '✘'} ${t.id} · ${t.level} · Ihre Antwort: ${sec.answers[k] ?? '–'} · richtig: ${t.answer}</summary>
+          <div class="review-task">${taskHTML(t, { answer: sec.answers[k], reveal: true, interactive: false })}</div></details>`;
+      }).join('')}</section>`;
+  }
+  store.set(HISTORY_KEY, history.slice(0, 50));
+  html += '<p><button class="primary" id="home">Zur Startseite</button></p>';
+  app.innerHTML = html;
+  document.getElementById('home').onclick = () => { S = null; renderHome(); };
+}
+
+/* ------------------------------------------------------------------ Übungsmodus */
+function startPractice(type, level) {
+  P = { type, level, rng: createRng(Date.now()), task: null, answer: null, checked: false, correct: 0, total: 0 };
+  nextPractice();
+}
+
+function nextPractice() {
+  const lvl = P.level === 'gemischt' ? P.rng.pick(LEVELS) : P.level;
+  P.task = generateTask(P.rng, P.type, lvl);
+  P.answer = null;
+  P.checked = false;
+  renderPractice();
+}
+
+function renderPractice() {
+  screen = 'practice';
+  const t = P.task;
+  const ok = P.checked && same(P.answer, t.answer);
+  app.innerHTML = `
+    <div class="topbar"><div><b>${TYPES[P.type].label}</b> · ${t.level}</div>
+      <div>Richtig: <b>${P.correct}</b> / ${P.total}</div>
+      <button id="end">Beenden</button></div>
+    <section class="card task">${taskHTML(t, { answer: P.answer, reveal: P.checked, interactive: !P.checked })}
+      ${P.checked ? `<p class="feedback ${ok ? 'ok' : 'bad'}">${ok ? 'Richtig!' : `Leider falsch – richtig ist ${t.answer}.`}</p>` : '<p class="feedback" id="msg"></p>'}
+    </section>
+    <div class="row"><button class="primary" id="main">${P.checked ? 'Nächste Aufgabe' : 'Prüfen'}</button></div>`;
+  document.getElementById('end').onclick = endPractice;
+  const main = document.getElementById('main');
+  main.onclick = () => (P.checked ? nextPractice() : checkPractice());
+  if (!P.checked) bindTask(t, (a) => { P.answer = a; }, checkPractice);
+  else main.focus();
+}
+
+function checkPractice() {
+  if (P.answer === null) { document.getElementById('msg').textContent = 'Bitte zuerst eine Antwort geben.'; return; }
+  P.checked = true;
+  P.total++;
+  if (same(P.answer, P.task.answer)) P.correct++;
+  renderPractice();
+}
+
+function endPractice() {
+  if (P.total > 0) store.set(HISTORY_KEY, [{ ts: Date.now(), mode: 'practice', type: P.type, correct: P.correct, total: P.total }, ...store.get(HISTORY_KEY, [])].slice(0, 50));
+  P = null;
+  renderHome();
+}
+
+/* ------------------------------------------------------------------ Tastatur & Schutz */
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const typing = e.target.tagName === 'INPUT';
+  if (screen === 'exam') {
+    const sec = S.sections[S.si];
+    if (!typing && e.key === 'ArrowRight') go(sec.i + 1);
+    else if (!typing && e.key === 'ArrowLeft') go(sec.i - 1);
+    else if (!typing && sec.tasks[sec.i].type === 'quadrate' && /^[a-e]$/i.test(e.key))
+      document.querySelector(`.choices button[data-letter="${e.key.toUpperCase()}"]`)?.click();
+  } else if (screen === 'practice' && !P.checked && !typing && P.task.type === 'quadrate' && /^[a-e]$/i.test(e.key)) {
+    document.querySelector(`.choices button[data-letter="${e.key.toUpperCase()}"]`)?.click();
+  }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (screen === 'exam') { e.preventDefault(); e.returnValue = ''; }
+});
+
+renderHome();

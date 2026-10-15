@@ -1,0 +1,12 @@
+{
+  "name": "testas-simulator",
+  "version": "0.1.0",
+  "description": "Inoffizieller TestAS-Kernmodul-Simulator: Mathematische Gleichungen und Lateinische Quadrate",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node scripts/serve.js"
+  }
+}
