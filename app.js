@@ -149,9 +149,9 @@ function historyHTML() {
           <td>${h.mode === 'exam' ? 'Prüfung' : 'Übung'}</td><td>${esc(TYPES[h.type]?.label ?? h.type)}</td>
           <td>${h.correct}/${h.total}${h.seconds ? ` · ${fmt(h.seconds * 1000)}` : ''}${h.seed != null ? ` · Seed ${h.seed}` : ''}</td></tr>`).join('')}
         </tbody></table></div>`
-    : '<p class="muted">Noch keine Ergebnisse – starte eine Prüfung oder eine Übung.</p>';
+    : '<p class="lead muted">Noch keine Ergebnisse – starten Sie eine Prüfung oder eine Übung.</p>';
   const hint = authAvailable && !user
-    ? '<div class="hint-box"><p>Mit einem Konto wird dein Verlauf gespeichert und auf allen Geräten angezeigt.</p><button class="small" data-login>Anmelden</button></div>'
+    ? '<div class="hint-box"><p>Mit einem Konto wird Ihr Verlauf gespeichert und auf allen Geräten angezeigt.</p><button class="small" data-login>Anmelden</button></div>'
     : '';
   return table + hint;
 }
@@ -159,6 +159,8 @@ function historyHTML() {
 function renderHome(scrollTo = null) {
   setScreen('home');
   clearInterval(timerId);
+  const tags = ['Figurale Sequenzen', 'Mathematische Gleichungen', 'Lateinische Quadrate', 'niedrig', 'mittel', 'hoch', '20 Aufgaben', '25 Minuten', 'Seed-Wiederholung', 'Sofort-Feedback', 'Safe Exam Browser', 'Konto optional'];
+  const tickerList = `<ul aria-hidden="true">${tags.map((t) => `<li>${t}</li>`).join('')}</ul>`;
   const previewFig = frameSVG([
     { shape: 'triangle', row: 1, col: 2, rot: 1, color: 'yellow' },
     { shape: 'square', row: 2, col: 0, rot: 0, color: 'pink' },
@@ -170,68 +172,100 @@ function renderHome(scrollTo = null) {
   const previewEq = '<div class="mini-eqs"><div><b>A</b> × 3 = <b>B</b></div><div><b>B</b> – <b>A</b> = 8</div></div>';
 
   app.innerHTML = `
-    <section class="intro">
-      <h1>TestAS Kernmodul üben</h1>
-      <p class="lead">Selbst generierte Aufgaben zu allen drei Subtests – entweder mit Zeitlimit wie in der Prüfung oder mit sofortiger Rückmeldung.${isSEB ? ' <span class="badge seb">Safe Exam Browser erkannt</span>' : ''}</p>
+    <section class="hero">
+      <p class="eyebrow"><b>TestAS</b> · Kernmodul</p>
+      <h1>Üben wie in der <em>Prüfung.</em></h1>
+      <p class="lead">Alle drei Aufgabentypen des digitalen TestAS Kernmoduls – unendlich viele, selbst generierte Aufgaben, mit Zeitlimit oder mit sofortiger Rückmeldung.</p>
+      <div class="ctas">
+        <button class="primary lg" data-go="pruefung">Prüfung starten</button>
+        <button class="lg" data-go="ueben">Einfach üben</button>
+      </div>
+      <p class="meta">Läuft im Browser · Konto optional${isSEB ? ' · <span class="badge seb">Safe Exam Browser erkannt</span>' : ''}</p>
     </section>
-
-    <div class="modes">
-      <section class="card" id="pruefung">
-        <h2>Prüfung</h2>
-        <p class="muted">${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, Rückmeldung erst nach der Abgabe. Keine Notizen.</p>
-        <label for="exam-type">Umfang</label>
-        <select id="exam-type">
-          <option value="all">Kernmodul (alle drei Subtests)</option>
-          <option value="figural">Nur Figurale Sequenzen</option>
-          <option value="gleichungen">Nur Mathematische Gleichungen</option>
-          <option value="quadrate">Nur Lateinische Quadrate</option>
-        </select>
-        <label for="seed">Seed (optional, für dieselbe Aufgabenreihe)</label>
-        <input id="seed" type="number" min="0" placeholder="zufällig">
-        <div class="actions"><button class="primary lg" id="start-exam">Prüfung starten</button></div>
-      </section>
-
-      <section class="card" id="ueben">
-        <h2>Üben</h2>
-        <p class="muted">Unbegrenzt neue Aufgaben, sofortige Rückmeldung mit Lösungsweg, kein Zeitlimit.</p>
-        <label for="prac-type">Aufgabentyp</label>
-        <select id="prac-type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
-        <label for="prac-level">Schwierigkeit</label>
-        <select id="prac-level"><option value="gemischt">gemischt</option>${LEVELS.map((l) => `<option>${l}</option>`).join('')}</select>
-        <div class="actions"><button class="primary lg" id="start-prac">Üben starten</button></div>
-      </section>
-    </div>
+    <div class="ticker" aria-hidden="true"><div class="ticker-track">${tickerList}${tickerList}</div></div>
 
     <section class="section" id="typen">
-      <h2>Aufgabentypen</h2>
+      <p class="eyebrow"><b>01</b> / Aufgabentypen</p>
+      <h2>Drei Subtests. Ein Ziel.</h2>
+      <p class="lead">Jeder Typ in drei Schwierigkeitsstufen. Starten Sie direkt mit einem Typ – oder simulieren Sie das ganze Kernmodul.</p>
       <div class="tcards">
         <article class="tcard">
-          <h3>Figurale Sequenzen</h3>
+          <span class="num">01</span><h3>Figurale Sequenzen</h3>
           <div class="preview">${previewFig}</div>
-          <p>Figuren ändern Position, Farbe und Ausrichtung nach Regeln. Die Matrizenreihe muss fortgesetzt werden.</p>
-          <div class="row"><button data-practice="figural">Üben</button></div>
+          <p>Figuren ändern Position, Farbe und Ausrichtung nach Regeln. Setzen Sie die Matrizenreihe fort.</p>
+          <div class="row"><button class="primary" data-practice="figural">Üben</button></div>
         </article>
         <article class="tcard">
-          <h3>Mathematische Gleichungen</h3>
+          <span class="num">02</span><h3>Mathematische Gleichungen</h3>
           <div class="preview">${previewEq}</div>
           <p>Gleichungssysteme mit bis zu vier Unbekannten. Jeder Buchstabe hat genau einen Wert von 1 bis 20.</p>
-          <div class="row"><button data-practice="gleichungen">Üben</button></div>
+          <div class="row"><button class="primary" data-practice="gleichungen">Üben</button></div>
         </article>
         <article class="tcard">
-          <h3>Lateinische Quadrate</h3>
+          <span class="num">03</span><h3>Lateinische Quadrate</h3>
           <div class="preview">${previewLatin}</div>
           <p>5×5-Raster mit den Buchstaben A–E. Welcher Buchstabe gehört an die Stelle des Fragezeichens?</p>
-          <div class="row"><button data-practice="quadrate">Üben</button></div>
+          <div class="row"><button class="primary" data-practice="quadrate">Üben</button></div>
         </article>
       </div>
     </section>
 
+    <section class="section" id="pruefung">
+      <p class="eyebrow"><b>02</b> / Prüfungsmodus</p>
+      <h2>Wie im Testzentrum.</h2>
+      <p class="lead">${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, keine Rückmeldung bis zur Abgabe. Notizen sind nicht erlaubt.</p>
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label for="exam-type">Umfang</label>
+            <select id="exam-type">
+              <option value="all">Kernmodul (alle drei Subtests)</option>
+              <option value="figural">Nur Figurale Sequenzen</option>
+              <option value="gleichungen">Nur Mathematische Gleichungen</option>
+              <option value="quadrate">Nur Lateinische Quadrate</option>
+            </select>
+          </div>
+          <div>
+            <label for="seed">Seed (optional – für dieselbe Aufgabenreihe)</label>
+            <input id="seed" type="number" min="0" placeholder="zufällig">
+          </div>
+        </div>
+        <p style="margin-top:18px"><button class="primary lg" id="start-exam">Prüfung starten</button></p>
+      </div>
+    </section>
+
+    <section class="section" id="ueben">
+      <p class="eyebrow"><b>03</b> / Übungsmodus</p>
+      <h2>Ohne Zeitdruck.</h2>
+      <p class="lead">Unbegrenzt viele neue Aufgaben mit sofortiger Rückmeldung und Lösungsweg.</p>
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label for="prac-type">Aufgabentyp</label>
+            <select id="prac-type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label for="prac-level">Schwierigkeit</label>
+            <select id="prac-level"><option value="gemischt">gemischt</option>${LEVELS.map((l) => `<option>${l}</option>`).join('')}</select>
+          </div>
+        </div>
+        <p style="margin-top:18px"><button class="primary lg" id="start-prac">Üben</button></p>
+      </div>
+    </section>
+
     <section class="section" id="verlauf">
-      <h2>Verlauf</h2>
+      <p class="eyebrow"><b>04</b> / Verlauf</p>
+      <h2>Ihre letzten Ergebnisse.</h2>
       <div id="verlauf-body">${historyHTML()}</div>
+      <div class="feat">
+        <div><span class="letter">A</span><h3>Lokal oder mit Konto</h3><p>Ergebnisse bleiben im Browser – mit Konto werden sie zusätzlich synchronisiert.</p></div>
+        <div><span class="letter">B</span><h3>Reproduzierbar</h3><p>Mit demselben Seed erhalten Sie jederzeit dieselbe Aufgabenreihe wieder.</p></div>
+        <div><span class="letter">C</span><h3>Eindeutig gelöst</h3><p>Jede Aufgabe hat genau eine richtige Lösung – vom Generator geprüft.</p></div>
+      </div>
     </section>`;
 
   const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  app.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(b.dataset.go)));
   app.querySelectorAll('[data-practice]').forEach((b) => (b.onclick = () => startPractice(b.dataset.practice, 'gemischt')));
   document.getElementById('start-exam').onclick = () => {
     const seedRaw = document.getElementById('seed').value;

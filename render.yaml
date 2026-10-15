@@ -7,11 +7,10 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /index.html
+    # BETTER_AUTH_URL ist nicht nötig: es wird RENDER_EXTERNAL_URL verwendet (nur bei eigener Domain setzen)
     envVars:
       - key: BETTER_AUTH_SECRET
         generateValue: true
-      - key: BETTER_AUTH_URL        # nach dem ersten Deploy die echte URL eintragen
-        sync: false
       - key: DATABASE_URL           # Neon-Connection-String
         sync: false
       - key: GITHUB_CLIENT_ID

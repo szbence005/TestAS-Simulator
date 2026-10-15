@@ -5,18 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TestAS Simulator</title>
   <meta name="description" content="Übungs- und Prüfungssimulator für das TestAS-Kernmodul">
-  <meta name="theme-color" content="#f7f7f5">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232457a6'/%3E%3Cpath d='M8 8h16v5H18v11h-4V13H8z' fill='%23fff'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#0b0b0c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0b0c'/%3E%3Cpath d='M8 8h16v5H18v11h-4V13H8z' fill='%23ff5b2e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-screen="home">
   <header class="site-header">
     <div class="wrap">
-      <a class="brand" href="#" id="brand" aria-label="TestAS Simulator – Startseite">TestAS Simulator</a>
+      <a class="brand" href="#" id="brand" aria-label="TestAS Simulator – Startseite">
+        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M8 8h16v5H18v11h-4V13H8z" fill="var(--accent-ink)"/></svg>
+        <span>TestAS<b>Sim</b></span>
+      </a>
       <nav class="site-nav" aria-label="Hauptnavigation">
+        <a href="#typen" data-go="typen">Aufgabentypen</a>
         <a href="#pruefung" data-go="pruefung">Prüfung</a>
         <a href="#ueben" data-go="ueben">Üben</a>
-        <a href="#typen" data-go="typen">Aufgabentypen</a>
         <a href="#verlauf" data-go="verlauf">Verlauf</a>
       </nav>
       <div id="auth-slot"></div>

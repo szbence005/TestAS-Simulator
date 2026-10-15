@@ -57,9 +57,20 @@ if (process.env.DATABASE_URL) {
 export { history };
 export const githubEnabled = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
 
+// Reihenfolge: eigene Angabe (z. B. eigene Domain) → von Render automatisch gesetzte URL → lokal.
+// Ungültige Werte (z. B. ein vergessener Platzhalter) werden übersprungen statt den Start abzubrechen.
+const validUrl = (name) => {
+  const v = process.env[name]?.trim().replace(/\/+$/, '');
+  if (!v) return null;
+  try { return ['http:', 'https:'].includes(new URL(v).protocol) ? v : null; } catch { /* ungültig */ }
+  console.warn(`${name}="${v}" ist keine gültige URL (https://… erwartet) und wird ignoriert.`);
+  return null;
+};
+const baseURL = validUrl('BETTER_AUTH_URL') ?? validUrl('RENDER_EXTERNAL_URL') ?? `http://localhost:${port}`;
+
 export const auth = betterAuth({
   database,
-  baseURL: process.env.BETTER_AUTH_URL ?? `http://localhost:${port}`,
+  baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   emailAndPassword: { enabled: true, minPasswordLength: 8 },
   socialProviders: githubEnabled
