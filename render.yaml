@@ -1,0 +1,20 @@
+# Render Blueprint: Dashboard → New → Blueprint → dieses Repo wählen
+services:
+  - type: web
+    name: testas-sim
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /index.html
+    envVars:
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL        # nach dem ersten Deploy die echte URL eintragen
+        sync: false
+      - key: DATABASE_URL           # Neon-Connection-String
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false

@@ -1,9 +1,11 @@
 import { createRng } from './rng.js';
 import { generateEquation } from './equations.js';
 import { generateSquare } from './latin.js';
+import { generateFigural } from './figural.js';
 
 export const LEVELS = ['niedrig', 'mittel', 'hoch'];
 export const TYPES = {
+  figural: { label: 'Figurale Sequenzen', gen: generateFigural },
   gleichungen: { label: 'Mathematische Gleichungen', gen: generateEquation },
   quadrate: { label: 'Lateinische Quadrate', gen: generateSquare },
 };

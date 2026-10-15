@@ -1,12 +1,24 @@
 {
   "name": "testas-simulator",
   "version": "0.1.0",
-  "description": "Inoffizieller TestAS-Kernmodul-Simulator: Mathematische Gleichungen und Lateinische Quadrate",
+  "description": "TestAS-Kernmodul-Simulator: Figurale Sequenzen, Mathematische Gleichungen und Lateinische Quadrate",
   "type": "module",
   "private": true,
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "start": "node scripts/serve.js"
+    "start": "node server/index.js",
+    "start:static": "node scripts/serve.js",
+    "auth:migrate": "npx auth@latest migrate --config server/auth.js -y"
+  },
+  "dependencies": {
+    "better-auth": "^1.3.0",
+    "pg": "^8.11.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

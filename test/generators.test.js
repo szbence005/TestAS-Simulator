@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRng } from '../src/rng.js';
 import { generateEquation, countSolutions, NAMES } from '../src/equations.js';
 import { generateSquare, LETTERS, deductionDepth } from '../src/latin.js';
+import { generateFigural, ambiguous, _internal } from '../src/figural.js';
 import { buildExamSet, LEVELS, EXAM } from '../src/tasks.js';
 
 test('Gleichungen: pontosan egy megoldás, és az a tárolt megoldás', () => {
@@ -46,11 +47,36 @@ test('Quadrate: érvényes latin négyzet, a megadott mezők egyeznek, a válasz
 });
 
 test('Vizsgasor: 20 feladat, helyes nehézségi eloszlás, azonos seed → azonos sor', () => {
-  for (const type of ['gleichungen', 'quadrate']) {
+  for (const type of ['figural', 'gleichungen', 'quadrate']) {
     const a = buildExamSet(type, 42);
     const b = buildExamSet(type, 42);
     assert.equal(a.length, EXAM.count);
     assert.deepEqual(a, b);
     for (const l of LEVELS) assert.equal(a.filter((t) => t.level === l).length, EXAM.mix[l]);
+  }
+});
+
+test('Figurale Sequenzen: egyértelmű szabály, nincs átfedés, a helyes opció az igazi mátrix, a rosszak különböznek', () => {
+  const rng = createRng(3);
+  for (const level of LEVELS) {
+    for (let i = 0; i < 25; i++) {
+      const t = generateFigural(rng, level);
+      assert.equal(t.frames.length, 4);
+      assert.equal(t.options.length, 2);
+      assert.equal(ambiguous(t.rules), false);
+      const all = [...t.frames, ...t.truth];
+      all.forEach((f) => assert.equal(_internal.hasOverlap(f), false));
+      t.options.forEach((opts, p) => {
+        assert.equal(opts.length, 3);
+        assert.equal(new Set(opts.map(_internal.key)).size, 3, 'három különböző opció');
+        assert.equal(_internal.key(opts[t.answer[p] - 1]), _internal.key(t.truth[p]));
+        opts.forEach((f) => {
+          assert.equal(_internal.hasOverlap(f), false);
+          f.forEach((fig) => assert.ok(fig.row >= 0 && fig.row < 4 && fig.col >= 0 && fig.col < 4));
+        });
+      });
+      if (level === 'niedrig') assert.ok(t.rules.length <= 2);
+      if (level === 'hoch') assert.ok(t.rules.length >= 3);
+    }
   }
 });
