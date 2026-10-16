@@ -60,11 +60,8 @@ If the site runs on a static host (e.g. GitHub Pages), there is no auth server: 
 
 ## Study groups and admin view (*Lerngruppen*)
 
-An admin can create groups; participants join with a code, and the admin sees the members' results. This works only with a server (Render or similar), not on GitHub Pages.
+An admin can create groups; participants join with a code, and the admin sees the members' results. 
 
-**Setting up an admin:** set the environment variable `ADMIN_EMAILS` (on Render: Dashboard → Environment), e.g. `ADMIN_EMAILS=you@example.com`; separate multiple addresses with commas. Register or sign in with an account using exactly that email address, and an **Admin** button appears in the header. The role comes solely from this variable and is not stored anywhere in the database.
-
-> **Important:** email addresses are not verified at registration, so create the admin account yourself right after setting the variable.
 
 **Workflow:**
 
@@ -76,11 +73,6 @@ An admin can create groups; participants join with a code, and the admin sees th
 
 **Technical notes:** two new tables, `study_groups` and `study_group_members`, are created at startup (Postgres and SQLite). The logic lives in `server/groups.js` (API) and `server/stats.js` (statistics, CSV, codes; tested in `test/groups.test.js`), and the UI in `src/admin.js`. Wrong codes are rate-limited (8 per 15 minutes per user). Trend = the last *k* results compared with the *k* before them (k ≤ 3, from 4 results onwards); a change of ±3 percentage points or more counts as rising/falling. Results currently store only the score per subtest, not a breakdown by difficulty.
 
-## Deploying to GitHub Pages
-
-1. Create a GitHub repository and push the project (`git remote add origin …`, then `git push -u origin main`).
-2. In the repo: Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-3. On every push to `main`, the tests run, and if they pass, `.github/workflows/pages.yml` deploys the site to `https://<username>.github.io/<repo>/`.
 
 ## Safe Exam Browser (SEB)
 
