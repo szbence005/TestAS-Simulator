@@ -85,6 +85,17 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   emailAndPassword: { enabled: true, minPasswordLength: 8 },
+  user: {
+    deleteUser: {
+      enabled: true,
+      afterDelete: async (deletedUser) => {
+        await sql.run('DELETE FROM study_group_members WHERE group_id IN (SELECT id FROM study_groups WHERE created_by = ?)', [deletedUser.id]);
+        await sql.run('DELETE FROM study_groups WHERE created_by = ?', [deletedUser.id]);
+        await sql.run('DELETE FROM study_group_members WHERE user_id = ?', [deletedUser.id]);
+        await sql.run('DELETE FROM history WHERE user_id = ?', [deletedUser.id]);
+      },
+    },
+  },
   socialProviders: githubEnabled
     ? { github: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET } }
     : undefined,

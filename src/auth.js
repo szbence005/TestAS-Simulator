@@ -64,6 +64,13 @@ export async function changePassword(currentPassword, newPassword) {
   } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
 }
 
+export async function deleteAccount(password = '') {
+  try {
+    const r = await post('/api/auth/delete-user', password ? { password } : {});
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
 export async function signOut() {
   try { await post('/api/auth/sign-out', {}); } catch { /* offline: Cookie läuft ohnehin ab */ }
 }

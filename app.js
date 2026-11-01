@@ -5,7 +5,7 @@ import { SIZE, SHAPES, COLORS } from './src/figural.js';
 import * as Auth from './src/auth.js';
 import * as Groups from './src/groups.js';
 import { renderAdmin } from './src/admin.js';
-import { renderAccountSettings } from './src/account.js';
+import { renderAccountInfo, renderAccountSettings } from './src/account.js';
 import { renderGroupsPage } from './src/groups-ui.js';
 
 const app = document.getElementById('app');
@@ -23,6 +23,11 @@ function setScreen(name) {
   const changed = screen !== name;
   screen = name;
   document.body.dataset.screen = name;
+  const activePage = { 'exam-page': 'exam', 'practice-page': 'practice', 'history-page': 'history' }[name];
+  document.querySelectorAll('.site-nav [data-page]').forEach((link) => {
+    if (link.dataset.page === activePage) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
   if (changed) window.scrollTo(0, 0);
 }
 let S = null;   // Prüfungssitzung
@@ -30,6 +35,19 @@ let P = null;   // Übungssitzung
 let timerId = null;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function profileAvatar(person) {
+  const palettes = [
+    ['#e6430f', '#fff'], ['#13794a', '#fff'], ['#0b63ce', '#fff'], ['#a55f00', '#fff'],
+  ];
+  const identity = person.name || person.email || person.id;
+  const hash = [...identity].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 7);
+  const [background, foreground] = palettes[hash % palettes.length];
+  const initials = identity.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+  return `<svg class="profile-avatar" viewBox="0 0 40 40" role="img" aria-label="${esc(`Profilbild von ${identity}`)}">
+    <rect width="40" height="40" rx="20" fill="${background}"/><path d="M0 25 25 0h8L8 40H0zM23 40l17-17v8L31 40z" fill="${foreground}" opacity=".14"/>
+    <text x="20" y="23" text-anchor="middle" dominant-baseline="middle" fill="${foreground}">${esc(initials)}</text>
+  </svg>`;
+}
 const fmt = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 const same = (a, b) => a !== null && a !== undefined && String(a) === String(b);
 // Figurale Sequenzen: a válasz egy [kép1, kép2] tömb (1–3); csak akkor kész, ha mindkettő ki van töltve.
@@ -146,8 +164,8 @@ function bindTask(task, onAnswer, onEnter) {
 }
 
 /* ------------------------------------------------------------------ Startseite */
-function historyHTML() {
-  const hist = store.get(HISTORY_KEY, []).slice(0, 8);
+function historyHTML(limit = 8) {
+  const hist = store.get(HISTORY_KEY, []).slice(0, limit);
   const table = hist.length
     ? `<div class="card"><table><thead><tr><th>Datum</th><th>Modus</th><th>Typ</th><th>Ergebnis</th></tr></thead><tbody>
         ${hist.map((h) => `<tr><td>${esc(new Date(h.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
@@ -204,126 +222,102 @@ function renderOnboarding() {
     </section>`;
 }
 
-function renderHome(scrollTo = null) {
+function renderHome() {
   if (!sessionReady) return renderStartup();
   if (!user) return renderOnboarding();
   setScreen('home');
   clearInterval(timerId);
-  const tags = ['Figurale Sequenzen', 'Mathematische Gleichungen', 'Lateinische Quadrate', 'niedrig', 'mittel', 'hoch', '20 Aufgaben', '25 Minuten', 'Seed-Wiederholung', 'Sofort-Feedback', 'Safe Exam Browser'];
-  const tickerList = `<ul aria-hidden="true">${tags.map((t) => `<li>${t}</li>`).join('')}</ul>`;
-  const previewFig = frameSVG([
-    { shape: 'triangle', row: 1, col: 2, rot: 1, color: 'yellow' },
-    { shape: 'square', row: 2, col: 0, rot: 0, color: 'pink' },
-    { shape: 'hexagon', row: 3, col: 3, rot: 0, color: 'green' },
-    { shape: 'moon', row: 0, col: 1, rot: 2, color: 'orange' },
-  ], { label: 'Beispielmatrix' });
-  const sample = [['A', 'B', 'C', '', 'E'], ['', 'C', '', 'E', ''], ['C', 'D', 'E', '', 'B'], ['', 'E', '', 'B', ''], ['E', '?', '', 'C', '']];
-  const previewLatin = `<div class="latin mini" aria-label="Beispielraster">${sample.flat().map((v) => `<div${v === '?' ? ' class="q"' : ''}>${v}</div>`).join('')}</div>`;
-  const previewEq = '<div class="mini-eqs"><div><b>A</b> × 3 = <b>B</b></div><div><b>B</b> – <b>A</b> = 8</div></div>';
-
+  const entries = store.get(HISTORY_KEY, []);
+  const totalCorrect = entries.reduce((sum, entry) => sum + entry.correct, 0);
+  const totalQuestions = entries.reduce((sum, entry) => sum + entry.total, 0);
+  const accuracy = totalQuestions ? `${Math.round(totalCorrect / totalQuestions * 100)} %` : '–';
   app.innerHTML = `
-    <section class="hero platform-hero" id="uebersicht">
+    <section class="hero platform-hero">
       <p class="eyebrow"><b>DEIN TRAININGSBEREICH</b> · KERNMODUL</p>
       <h1>Willkommen zurück, <em>${esc(user.name || user.email)}</em>.</h1>
-      <p class="lead">Wähle deinen nächsten Schritt: Starte eine Prüfungssimulation oder übe gezielt einen Aufgabentyp.</p>
-      <div class="ctas">
-        <button class="primary lg" data-go="pruefung">Prüfungssimulation</button>
-        <button class="lg" data-go="ueben">Gezielt üben</button>
-      </div>
-      <p class="meta">Dein Verlauf wird mit deinem Konto synchronisiert${isSEB ? ' · <span class="badge seb">Safe Exam Browser erkannt</span>' : ''}</p>
+      <p class="lead">Wähle deinen nächsten Schritt und arbeite gezielt an deinem TestAS-Kernmodul.</p>
+      <p class="meta">${isSEB ? '<span class="badge seb">Safe Exam Browser erkannt</span>' : 'Dein Trainingsbereich'}</p>
     </section>
-    <div class="ticker" aria-hidden="true"><div class="ticker-track">${tickerList}${tickerList}</div></div>
-
-    <section class="section" id="typen">
-      <p class="eyebrow"><b>01</b> / Aufgabentypen</p>
-      <h2>Drei Subtests. Ein Ziel.</h2>
-      <p class="lead">Jeder Typ in drei Schwierigkeitsstufen. Starten Sie direkt mit einem Typ – oder simulieren Sie das ganze Kernmodul.</p>
-      <div class="tcards">
-        <article class="tcard">
-          <span class="num">01</span><h3>Figurale Sequenzen</h3>
-          <div class="preview">${previewFig}</div>
-          <p>Figuren ändern Position, Farbe und Ausrichtung nach Regeln. Setzen Sie die Matrizenreihe fort.</p>
-          <div class="row"><button class="primary" data-practice="figural">Üben</button></div>
-        </article>
-        <article class="tcard">
-          <span class="num">02</span><h3>Mathematische Gleichungen</h3>
-          <div class="preview">${previewEq}</div>
-          <p>Gleichungssysteme mit bis zu vier Unbekannten. Jeder Buchstabe hat genau einen Wert von 1 bis 20.</p>
-          <div class="row"><button class="primary" data-practice="gleichungen">Üben</button></div>
-        </article>
-        <article class="tcard">
-          <span class="num">03</span><h3>Lateinische Quadrate</h3>
-          <div class="preview">${previewLatin}</div>
-          <p>5×5-Raster mit den Buchstaben A–E. Welcher Buchstabe gehört an die Stelle des Fragezeichens?</p>
-          <div class="row"><button class="primary" data-practice="quadrate">Üben</button></div>
-        </article>
-      </div>
+    <section class="platform-metrics" aria-label="Dein Fortschritt">
+      <div><span class="metric-value">${entries.filter((entry) => entry.mode === 'exam').length}</span><span class="muted">Subtests abgeschlossen</span></div>
+      <div><span class="metric-value">${entries.filter((entry) => entry.mode === 'practice').length}</span><span class="muted">Übungssitzungen</span></div>
+      <div><span class="metric-value">${accuracy}</span><span class="muted">Gesamtquote</span></div>
     </section>
-
-    <section class="section" id="pruefung">
-      <p class="eyebrow"><b>02</b> / Prüfungsmodus</p>
-      <h2>Wie im Testzentrum.</h2>
-      <p class="lead">${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, keine Rückmeldung bis zur Abgabe. Notizen sind nicht erlaubt.</p>
-      <div class="card">
-        <div class="grid">
-          <div>
-            <label for="exam-type">Umfang</label>
-            <select id="exam-type">
-              <option value="all">Kernmodul (alle drei Subtests)</option>
-              <option value="figural">Nur Figurale Sequenzen</option>
-              <option value="gleichungen">Nur Mathematische Gleichungen</option>
-              <option value="quadrate">Nur Lateinische Quadrate</option>
-            </select>
-          </div>
-          <div>
-            <label for="seed">Seed (optional – für dieselbe Aufgabenreihe)</label>
-            <input id="seed" type="number" min="0" placeholder="zufällig">
-          </div>
-        </div>
-        <p style="margin-top:18px"><button class="primary lg" id="start-exam">Prüfung starten</button></p>
-      </div>
-    </section>
-
-    <section class="section" id="ueben">
-      <p class="eyebrow"><b>03</b> / Übungsmodus</p>
-      <h2>Ohne Zeitdruck.</h2>
-      <p class="lead">Unbegrenzt viele neue Aufgaben mit sofortiger Rückmeldung und Lösungsweg.</p>
-      <div class="card">
-        <div class="grid">
-          <div>
-            <label for="prac-type">Aufgabentyp</label>
-            <select id="prac-type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
-          </div>
-          <div>
-            <label for="prac-level">Schwierigkeit</label>
-            <select id="prac-level"><option value="gemischt">gemischt</option>${LEVELS.map((l) => `<option>${l}</option>`).join('')}</select>
-          </div>
-        </div>
-        <p style="margin-top:18px"><button class="primary lg" id="start-prac">Üben</button></p>
-      </div>
-    </section>
-
-    <section class="section" id="verlauf">
-      <p class="eyebrow"><b>04</b> / Verlauf</p>
-      <h2>Ihre letzten Ergebnisse.</h2>
-      <div id="verlauf-body">${historyHTML()}</div>
-      <div class="feat">
-        <div><span class="letter">A</span><h3>Lokal oder mit Konto</h3><p>Ergebnisse bleiben im Browser – mit Konto werden sie zusätzlich synchronisiert.</p></div>
-        <div><span class="letter">B</span><h3>Reproduzierbar</h3><p>Mit demselben Seed erhalten Sie jederzeit dieselbe Aufgabenreihe wieder.</p></div>
-        <div><span class="letter">C</span><h3>Eindeutig gelöst</h3><p>Jede Aufgabe hat genau eine richtige Lösung – vom Generator geprüft.</p></div>
-      </div>
+    <section class="platform-links" aria-label="Trainingsbereiche">
+      <a href="#pruefung" class="platform-link" data-page="exam"><span class="platform-index">01</span><span><b>Prüfung</b><small>${EXAM.count} Aufgaben je Subtest · ${EXAM.minutes} Minuten</small></span><span class="platform-arrow">→</span></a>
+      <a href="#ueben" class="platform-link" data-page="practice"><span class="platform-index">02</span><span><b>Üben</b><small>Aufgabentyp und Schwierigkeit auswählen</small></span><span class="platform-arrow">→</span></a>
+      <a href="#verlauf" class="platform-link" data-page="history"><span class="platform-index">03</span><span><b>Verlauf</b><small>Ergebnisse und Fortschritt ansehen</small></span><span class="platform-arrow">→</span></a>
+      <a href="#gruppen" class="platform-link" data-page="groups"><span class="platform-index">04</span><span><b>Lerngruppen</b><small>Gruppe erstellen oder beitreten</small></span><span class="platform-arrow">→</span></a>
     </section>`;
+  app.querySelectorAll('[data-page]').forEach((link) => (link.onclick = (event) => {
+    event.preventDefault();
+    openPlatformPage(link.dataset.page);
+  }));
+  window.scrollTo(0, 0);
+}
 
-  const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  app.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => go(b.dataset.go)));
-  app.querySelectorAll('[data-practice]').forEach((b) => (b.onclick = () => startPractice(b.dataset.practice, 'gemischt')));
+function renderExamPage() {
+  setScreen('exam-page');
+  app.innerHTML = `
+    <p class="eyebrow"><b>PRÜFUNGSMODUS</b> / KERNSIMULATION</p>
+    <h1>Prüfung</h1>
+    <p class="lead muted">${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, keine Rückmeldung bis zur Abgabe.</p>
+    <section class="card">
+      <div class="grid">
+        <div><label for="exam-type">Umfang</label><select id="exam-type">
+          <option value="all">Kernmodul (alle drei Subtests)</option>
+          <option value="figural">Nur Figurale Sequenzen</option>
+          <option value="gleichungen">Nur Mathematische Gleichungen</option>
+          <option value="quadrate">Nur Lateinische Quadrate</option>
+        </select></div>
+        <div><label for="seed">Seed (optional, für dieselbe Aufgabenreihe)</label><input id="seed" type="number" min="0" placeholder="zufällig"></div>
+      </div>
+      <p style="margin-top:18px"><button class="primary lg" id="start-exam">Prüfung starten</button></p>
+    </section>`;
   document.getElementById('start-exam').onclick = () => {
     const seedRaw = document.getElementById('seed').value;
     startExam(document.getElementById('exam-type').value, seedRaw === '' ? null : Number(seedRaw));
   };
+}
+
+function renderPracticePage() {
+  setScreen('practice-page');
+  app.innerHTML = `
+    <p class="eyebrow"><b>ÜBUNGSMODUS</b> / INDIVIDUELL</p>
+    <h1>Üben</h1>
+    <p class="lead muted">Unbegrenzt viele neue Aufgaben mit sofortiger Rückmeldung und Lösungsweg.</p>
+    <section class="card">
+      <div class="grid">
+        <div><label for="prac-type">Aufgabentyp</label><select id="prac-type">${Object.entries(TYPES).map(([key, value]) => `<option value="${key}">${value.label}</option>`).join('')}</select></div>
+        <div><label for="prac-level">Schwierigkeit</label><select id="prac-level"><option value="gemischt">gemischt</option>${LEVELS.map((level) => `<option value="${level}">${level}</option>`).join('')}</select></div>
+      </div>
+      <p style="margin-top:18px"><button class="primary lg" id="start-prac">Üben</button></p>
+    </section>`;
   document.getElementById('start-prac').onclick = () =>
     startPractice(document.getElementById('prac-type').value, document.getElementById('prac-level').value);
-  if (scrollTo) requestAnimationFrame(() => go(scrollTo)); else window.scrollTo(0, 0);
+}
+
+function renderHistoryPage() {
+  setScreen('history-page');
+  app.innerHTML = `
+    <p class="eyebrow"><b>DEIN FORTSCHRITT</b> / ERGEBNISSE</p>
+    <h1>Verlauf</h1>
+    <p class="lead muted">Deine letzten Prüfungs- und Übungsergebnisse.</p>
+    <div id="verlauf-body">${historyHTML(50)}</div>`;
+}
+
+function openPlatformPage(page) {
+  if (!user) return renderOnboarding();
+  if (screen === 'exam' || screen === 'intro') return;
+  if (screen === 'practice') endPractice();
+  if (page === 'exam') renderExamPage();
+  else if (page === 'practice') renderPracticePage();
+  else if (page === 'history') renderHistoryPage();
+  else if (page === 'groups') renderGroupsPage({
+    app, setScreen, goHome: () => goHome(),
+    onOpenGroup: (groupId) => renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId }),
+  });
+  else renderHome();
 }
 
 /* ------------------------------------------------------------------ Prüfung */
@@ -560,30 +554,71 @@ function renderAuthSlot() {
     return;
   }
   slot.innerHTML = user
-    ? `<span class="who" title="${esc(user.email)}">${esc(user.name || user.email)}</span>${isAdmin ? '<button class="small" id="admin">Admin</button>' : ''}<button class="small" id="groups">Lerngruppen</button><button class="small" id="settings">Einstellungen</button><button class="small" id="logout">Abmelden</button>`
-    : '<button class="small" data-auth-mode="login">Anmelden</button><button class="small primary" data-auth-mode="register">Registrieren</button>';
+    ? `<div class="profile-control">
+        <button type="button" class="profile-trigger" id="profile-trigger" aria-expanded="false" aria-controls="profile-menu" aria-label="Profilmenü öffnen">
+          ${profileAvatar(user)}<span class="profile-name">${esc(user.name || user.email)}</span><span class="profile-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <nav class="profile-menu" id="profile-menu" aria-label="Profilmenü" hidden>
+          <a href="#kontoinformationen" id="profile-info">Kontoinformationen</a>
+          <a href="#einstellungen" id="profile-settings">Einstellungen</a>
+          <a href="#lerngruppen" id="profile-groups">Lerngruppen</a>
+          ${isAdmin ? '<a href="#admin" id="profile-admin">Admin-Dashboard</a>' : ''}
+        </nav>
+      </div>`
+    : '<a class="auth-link" href="#login" data-auth-mode="login">Anmelden</a><a class="auth-link auth-link-primary" href="#register" data-auth-mode="register">Registrieren</a>';
   note.textContent = user ? 'Dein Trainingsbereich ist mit deinem Konto verbunden.' : 'Registriere dich, um deinen persönlichen Trainingsbereich zu öffnen.';
   if (!user) return;
-  document.getElementById('logout').onclick = logout;
-  document.getElementById('groups').onclick = () => renderGroupsPage({
-    app,
-    setScreen,
-    goHome: () => goHome(),
-    onOpenGroup: (groupId) => renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId }),
+  const menu = document.getElementById('profile-menu');
+  const trigger = document.getElementById('profile-trigger');
+  const closeMenu = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
+  trigger.onclick = () => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute('aria-expanded', String(!menu.hidden));
+  };
+  document.getElementById('profile-info').onclick = (event) => {
+    event.preventDefault();
+    closeMenu();
+    renderAccountInfo({ app, setScreen, goHome: () => goHome(), user, onOpenSettings: () => renderAccountSettingsPage() });
+  };
+  document.getElementById('profile-settings').onclick = (event) => { event.preventDefault(); closeMenu(); renderAccountSettingsPage(); };
+  document.getElementById('profile-groups').onclick = (event) => { event.preventDefault(); closeMenu(); openPlatformPage('groups'); };
+  document.getElementById('profile-admin')?.addEventListener('click', (event) => {
+    event.preventDefault(); closeMenu(); renderAdmin({ app, setScreen, goHome: () => goHome() });
   });
-  document.getElementById('settings').onclick = () => renderAccountSettings({
+
+  function renderAccountSettingsPage() {
+    renderAccountSettings({
     app,
     setScreen,
     goHome: () => goHome(),
     user,
     onUserUpdated: (updatedUser) => { user = updatedUser; renderAuthSlot(); },
-  });
-  if (isAdmin) document.getElementById('admin').onclick = () => { if (screen !== 'exam' && screen !== 'intro') renderAdmin({ app, setScreen, goHome: () => goHome() }); };
+    onAccountDeleted: logout,
+      onLogout: logout,
+    });
+  }
 }
+
+document.addEventListener('click', (event) => {
+  if (event.target.closest('.profile-control')) return;
+  const menu = document.getElementById('profile-menu');
+  if (menu) {
+    menu.hidden = true;
+    document.getElementById('profile-trigger')?.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const menu = document.getElementById('profile-menu');
+  if (menu) {
+    menu.hidden = true;
+    document.getElementById('profile-trigger')?.setAttribute('aria-expanded', 'false');
+  }
+});
 
 function refreshHistory() {
   const body = document.getElementById('verlauf-body');
-  if (screen === 'home' && body) body.innerHTML = historyHTML();
+  if (screen === 'history-page' && body) body.innerHTML = historyHTML(50);
 }
 
 // Lokalen und serverseitigen Verlauf zusammenführen (nach Login bzw. beim Laden der Seite)
@@ -679,17 +714,16 @@ document.addEventListener('click', (e) => {
   if (authButton) openAuthDialog(authButton.dataset.authMode);
 });
 
-function goHome(target = null) {
+function goHome() {
   if (screen === 'exam' || screen === 'intro') return;
-  if (screen === 'practice') { endPractice(); if (target) document.getElementById(target)?.scrollIntoView(); return; }
+  if (screen === 'practice') { endPractice(); return; }
   S = null;
-  renderHome(target);
+  renderHome();
 }
 document.getElementById('brand').addEventListener('click', (e) => { e.preventDefault(); goHome(); });
 document.querySelectorAll('.site-nav a').forEach((a) => a.addEventListener('click', (e) => {
   e.preventDefault();
-  if (screen === 'home') document.getElementById(a.dataset.go)?.scrollIntoView({ behavior: 'smooth' });
-  else goHome(a.dataset.go);
+  openPlatformPage(a.dataset.page);
 }));
 
 renderStartup();

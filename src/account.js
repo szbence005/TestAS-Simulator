@@ -4,7 +4,25 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
 
-export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpdated }) {
+export function renderAccountInfo({ app, setScreen, goHome, user, onOpenSettings }) {
+  setScreen('account-info');
+  const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString('de-DE') : '–';
+  app.innerHTML = `
+    <div class="row" style="margin-top:14px"><button type="button" id="info-home">‹ Startseite</button></div>
+    <h1>Kontoinformationen</h1>
+    <p class="lead muted">Die persönlichen Daten deines Kontos.</p>
+    <section class="card account-info">
+      <div class="account-info-row"><span class="muted">Anzeigename</span><strong>${esc(user.name)}</strong></div>
+      <div class="account-info-row"><span class="muted">E-Mail-Adresse</span><strong>${esc(user.email)}</strong></div>
+      <div class="account-info-row"><span class="muted">Konto erstellt</span><strong>${createdAt}</strong></div>
+      <div class="account-info-row"><span class="muted">Konto-ID</span><code>${esc(user.id)}</code></div>
+      <button type="button" class="primary" id="info-settings">Einstellungen öffnen</button>
+    </section>`;
+  document.getElementById('info-home').onclick = goHome;
+  document.getElementById('info-settings').onclick = onOpenSettings;
+}
+
+export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpdated, onAccountDeleted, onLogout }) {
   setScreen('settings');
   app.innerHTML = `
     <div class="row" style="margin-top:14px"><button type="button" id="settings-home">‹ Startseite</button></div>
@@ -39,10 +57,23 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
           <button type="submit" class="primary" id="password-save">Passwort ändern</button>
         </form>
       </section>
-    </div>`;
+    </div>
+    <div class="row settings-actions"><button type="button" id="settings-logout">Abmelden</button></div>
+    <section class="account-danger">
+      <h2>Konto löschen</h2>
+      <p class="muted">Dein Konto, deine gespeicherten Ergebnisse und deine Gruppen werden dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.</p>
+      <form id="delete-account-form">
+        <label for="delete-password">Aktuelles Passwort (falls vorhanden)</label>
+        <input id="delete-password" type="password" autocomplete="current-password">
+        <label for="delete-confirm">Zur Bestätigung LÖSCHEN eingeben</label>
+        <div class="row nowrap"><input id="delete-confirm" type="text" autocomplete="off"><button type="submit" class="danger" id="delete-account" disabled>Konto endgültig löschen</button></div>
+        <p class="form-error" id="delete-error" role="alert"></p>
+      </form>
+    </section>`;
 
   const $ = (id) => document.getElementById(id);
   $('settings-home').onclick = goHome;
+  $('settings-logout').onclick = onLogout;
   $('profile-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const name = $('profile-name').value.trim();
@@ -71,5 +102,21 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
     if (!result.ok) { $('password-error').textContent = result.error; return; }
     $('password-form').reset();
     $('password-status').textContent = 'Dein Passwort wurde geändert.';
+  });
+
+  $('delete-confirm').addEventListener('input', () => { $('delete-account').disabled = $('delete-confirm').value !== 'LÖSCHEN'; });
+  $('delete-account-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if ($('delete-confirm').value !== 'LÖSCHEN') return;
+    if (!confirm('Möchtest du dein Konto und alle zugehörigen Daten wirklich endgültig löschen?')) return;
+    $('delete-error').textContent = '';
+    $('delete-account').disabled = true;
+    const result = await Auth.deleteAccount($('delete-password').value);
+    if (!result.ok) {
+      $('delete-error').textContent = result.error;
+      $('delete-account').disabled = false;
+      return;
+    }
+    onAccountDeleted?.();
   });
 }

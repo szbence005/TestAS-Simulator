@@ -56,7 +56,9 @@ Login is built on [Better Auth](https://www.better-auth.com/) (email + password,
 
 Better Auth's tables are created automatically at startup. If that fails, run `npm run auth:migrate` (= `npx auth@latest migrate --config server/auth.js -y`) and restart the server.
 
-If the site runs on a static host (e.g. GitHub Pages), there is no auth server: the "Anmelden" button is not shown and everything stays in the browser's `localStorage`, as before. Accounts require a host that runs Node (Render, Railway, Fly.io, your own VPS, …).
+If the site runs on a static host (e.g. GitHub Pages), there is no auth server: the onboarding page explains that registration is unavailable and the signed-in platform stays hidden. Accounts require a host that runs Node (Render, Railway, Fly.io, your own VPS, …).
+
+After signing in, use the **Prüfung**, **Üben**, and **Verlauf** navigation links to open each platform section as its own page. The profile avatar at the right opens **Kontoinformationen** and **Einstellungen**. Settings include display-name and password updates, sign-out, and permanent account deletion; the email address is read-only because email verification is not configured.
 
 ## Study groups and admin view (*Lerngruppen*)
 
