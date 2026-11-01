@@ -36,7 +36,7 @@ a { color: inherit; }
 .site-nav { display: flex; gap: 22px; margin-left: auto; }
 .site-nav a { text-decoration: none; color: var(--muted); padding: 5px 0; border-radius: 0; font-size: .92rem; }
 .site-nav a:hover, .site-nav a[aria-current="page"] { color: var(--text); background: none; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 7px; }
-#auth-slot { display: flex; align-items: center; margin-left: 0; }
+#auth-slot { display: flex; align-items: center; gap: 18px; margin-left: 0; }
 #auth-slot:empty { display: none; }
 #auth-slot .profile-control { position: relative; }
 #auth-slot .profile-trigger { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--text); }
@@ -332,7 +332,7 @@ label.check input { margin-top: 4px; }
 @media (max-width: 560px) {
   .site-nav { display: flex; gap: 9px; }
   .site-nav a { font-size: .78rem; }
-  #auth-slot { gap: 0; margin-left: 0; }
+  #auth-slot { gap: 14px; margin-left: 0; }
   .profile-avatar { width: 32px; height: 32px; flex-basis: 32px; }
   .profile-name { max-width: 76px; font-size: .78rem; }
   .profile-chevron { display: none; }

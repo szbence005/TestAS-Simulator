@@ -200,10 +200,6 @@ function renderOnboarding() {
 
   app.innerHTML = `
     <section class="onboarding">
-      <div class="onboarding-heading">
-        <p class="eyebrow"><b>TESTAS</b> / DIGITALES KERNMODUL</p>
-        <span class="badge">Übungsplattform</span>
-      </div>
       <div class="onboarding-grid">
         <div class="onboarding-copy">
           <h1>Drei Subtests.<br><em>Ein Trainingsplan.</em></h1>
