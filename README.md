@@ -60,16 +60,18 @@ If the site runs on a static host (e.g. GitHub Pages), there is no auth server: 
 
 ## Study groups and admin view (*Lerngruppen*)
 
-An admin can create groups; participants join with a code, and the admin sees the members' results. 
+Any signed-in user can create a group; participants join with a code, and the group creator can see the members' results. Admins retain access to all groups.
 
 
 **Workflow:**
 
-1. **Admin** → New group → enter a name; the join code (`XXXX-XXXX`) is assigned automatically.
-2. **Participants:** sign in → Account → enter the code → read the notice, consent → Join. Leaving is possible at any time (the admin can also remove members).
-3. **Admin** → open a group: a table with exams/practice sessions, average per subtest, last activity and trend. Clicking a name shows that member's history (chart + all results). Two CSV exports are available (overview, all individual results; semicolon-separated, decimal comma, UTF-8, opens directly in Excel).
+1. **Signed-in user** → Account → New group → enter a name; the join code (`XXXX-XXXX`) is assigned automatically.
+2. **Participants:** sign in → Account → enter the code → read the notice, consent → Join. Leaving is possible at any time (the group creator or an admin can also remove members).
+3. **Group creator** → Account → Your groups → Statistics: a table with exams/practice sessions, average per subtest, last activity and trend. Clicking a name shows that member's history (chart + all results). Two CSV exports are available (overview, all individual results; semicolon-separated, decimal comma, UTF-8, opens directly in Excel). Admins can view and manage all groups.
 
-**Privacy:** explicit consent is required when joining (the server enforces it). The admin can see the member's name, email and all stored results, including earlier ones. Only results saved while logged in exist on the server; anyone who has not joined is invisible to the admin. For minors, obtain parental consent where required (GDPR Art. 8; the age threshold in Hungary is 16).
+Admins also have a **System overview** with all registered users, usage totals, overall exam/practice performance, and per-user history.
+
+**Privacy:** explicit consent is required when joining (the server enforces it). The group creator and admins can see a member's name, email and all stored results, including earlier ones. Only results saved while logged in exist on the server; anyone who has not joined is invisible to the group creator. For minors, obtain parental consent where required (GDPR Art. 8; the age threshold in Hungary is 16).
 
 **Technical notes:** two new tables, `study_groups` and `study_group_members`, are created at startup (Postgres and SQLite). The logic lives in `server/groups.js` (API) and `server/stats.js` (statistics, CSV, codes; tested in `test/groups.test.js`), and the UI in `src/admin.js`. Wrong codes are rate-limited (8 per 15 minutes per user). Trend = the last *k* results compared with the *k* before them (k ≤ 3, from 4 results onwards); a change of ±3 percentage points or more counts as rising/falling. Results currently store only the score per subtest, not a breakdown by difficulty.
 

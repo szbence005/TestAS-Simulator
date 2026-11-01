@@ -513,7 +513,10 @@ function renderAuthSlot() {
   note.textContent = 'Läuft im Browser. Ergebnisse werden lokal gespeichert, mit Konto zusätzlich auf dem Server.';
   if (!user) { document.getElementById('login').onclick = () => openAuthDialog(); return; }
   document.getElementById('logout').onclick = logout;
-  document.getElementById('account').onclick = () => openAccountDialog(user);
+  document.getElementById('account').onclick = () => openAccountDialog(user, (groupId) => {
+    if (screen === 'exam' || screen === 'intro') return false;
+    renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId });
+  });
   if (isAdmin) document.getElementById('admin').onclick = () => { if (screen !== 'exam' && screen !== 'intro') renderAdmin({ app, setScreen, goHome: () => goHome() }); };
 }
 
