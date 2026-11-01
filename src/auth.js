@@ -1,6 +1,6 @@
 // Dünner Client für die Better-Auth-Endpunkte (/api/auth/*) und die Verlaufs-API (/api/history).
 // Auf einem rein statischen Host (z. B. GitHub Pages) gibt es diese Endpunkte nicht –
-// dann meldet getSession() { available: false } und die App läuft wie bisher nur lokal.
+// dann meldet getSession() { available: false } und die App zeigt nur das Onboarding.
 
 export async function call(path, options = {}) {
   const res = await fetch(path, { credentials: 'same-origin', ...options });
@@ -20,6 +20,7 @@ const ERRORS = {
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'Zu dieser E-Mail-Adresse gibt es schon ein Konto.',
   INVALID_EMAIL_OR_PASSWORD: 'E-Mail oder Passwort stimmt nicht.',
   INVALID_EMAIL: 'Bitte eine gültige E-Mail-Adresse eingeben.',
+  INVALID_PASSWORD: 'Das aktuelle Passwort ist falsch.',
   PASSWORD_TOO_SHORT: 'Das Passwort ist zu kurz (mindestens 8 Zeichen).',
   PASSWORD_TOO_LONG: 'Das Passwort ist zu lang.',
 };
@@ -45,6 +46,20 @@ export async function signUp(name, email, password) {
 export async function signIn(email, password) {
   try {
     const r = await post('/api/auth/sign-in/email', { email, password });
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
+export async function updateProfile(name) {
+  try {
+    const r = await post('/api/auth/update-user', { name });
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  try {
+    const r = await post('/api/auth/change-password', { currentPassword, newPassword, revokeOtherSessions: true });
     return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
   } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
 }

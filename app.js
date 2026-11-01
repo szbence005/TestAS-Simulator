@@ -4,7 +4,9 @@ import { LETTERS } from './src/latin.js';
 import { SIZE, SHAPES, COLORS } from './src/figural.js';
 import * as Auth from './src/auth.js';
 import * as Groups from './src/groups.js';
-import { openAccountDialog, renderAdmin } from './src/admin.js';
+import { renderAdmin } from './src/admin.js';
+import { renderAccountSettings } from './src/account.js';
+import { renderGroupsPage } from './src/groups-ui.js';
 
 const app = document.getElementById('app');
 const isSEB = /SEB/i.test(navigator.userAgent);
@@ -15,7 +17,8 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* privater Modus o. Ä. */ } },
 };
 
-let screen = 'home';
+let screen = 'loading';
+let sessionReady = false;
 function setScreen(name) {
   const changed = screen !== name;
   screen = name;
@@ -152,16 +155,61 @@ function historyHTML() {
           <td>${h.correct}/${h.total}${h.seconds ? ` · ${fmt(h.seconds * 1000)}` : ''}${h.seed != null ? ` · Seed ${h.seed}` : ''}</td></tr>`).join('')}
         </tbody></table></div>`
     : '<p class="lead muted">Noch keine Ergebnisse – starten Sie eine Prüfung oder eine Übung.</p>';
-  const hint = authAvailable && !user
-    ? '<div class="hint-box"><p>Mit einem Konto wird Ihr Verlauf gespeichert und auf allen Geräten angezeigt.</p><button class="small" data-login>Anmelden</button></div>'
-    : '';
-  return table + hint;
+  return table;
+}
+
+function renderStartup() {
+  setScreen('loading');
+  app.innerHTML = '<div class="startup-state" role="status">Konto und Trainingsplattform werden geladen …</div>';
+}
+
+function renderOnboarding() {
+  setScreen('onboarding');
+  clearInterval(timerId);
+  const previewFig = frameSVG([
+    { shape: 'triangle', row: 1, col: 2, rot: 1, color: 'yellow' },
+    { shape: 'square', row: 2, col: 0, rot: 0, color: 'pink' },
+    { shape: 'hexagon', row: 3, col: 3, rot: 0, color: 'green' },
+    { shape: 'moon', row: 0, col: 1, rot: 2, color: 'orange' },
+  ], { label: 'Beispielmatrix' });
+  const samples = [['A', 'B', 'C', '', 'E'], ['', 'C', '', 'E', ''], ['C', 'D', 'E', '', 'B'], ['', 'E', '', 'B', ''], ['E', '?', '', 'C', '']];
+  const previewLatin = `<div class="latin mini" aria-label="Beispielraster">${samples.flat().map((v) => `<div${v === '?' ? ' class="q"' : ''}>${v}</div>`).join('')}</div>`;
+  const previewEq = '<div class="mini-eqs"><div><b>A</b> × 3 = <b>B</b></div><div><b>B</b> – <b>A</b> = 8</div></div>';
+  const access = authAvailable
+    ? `<div class="row onboarding-actions"><button class="primary lg" data-auth-mode="register">Konto erstellen</button><button class="lg" data-auth-mode="login">Anmelden</button></div>
+       <p class="onboarding-note">Dein Trainingsbereich und gespeicherter Fortschritt sind nach der Anmeldung verfügbar.</p>`
+    : '<p class="form-note onboarding-note" role="status">Die Registrierung ist momentan nicht erreichbar. Bitte öffne die bereitgestellte Plattform mit aktivem Konto-Server.</p>';
+
+  app.innerHTML = `
+    <section class="onboarding">
+      <div class="onboarding-heading">
+        <p class="eyebrow"><b>TESTAS</b> / DIGITALES KERNMODUL</p>
+        <span class="badge">Übungsplattform</span>
+      </div>
+      <div class="onboarding-grid">
+        <div class="onboarding-copy">
+          <h1>Drei Subtests.<br><em>Ein Trainingsplan.</em></h1>
+          <p class="lead">Bereite dich strukturiert auf das TestAS-Kernmodul vor: mit unendlich vielen generierten Aufgaben, Prüfungssimulationen und nachvollziehbarem Fortschritt.</p>
+          ${access}
+          <p class="onboarding-footnote">Figurale Sequenzen · Mathematische Gleichungen · Lateinische Quadrate</p>
+        </div>
+        <div class="onboarding-preview" aria-label="Aufgabenbeispiele">
+          <div class="preview-head"><span>TRAINING / KERNMODUL</span><span>01 — 03</span></div>
+          <div class="preview-row"><span class="preview-number">01</span><div><b>Figurale Sequenzen</b><div class="preview-art">${previewFig}</div></div><span class="preview-mark">↗</span></div>
+          <div class="preview-row"><span class="preview-number">02</span><div><b>Mathematische Gleichungen</b><div class="preview-art">${previewEq}</div></div><span class="preview-mark">=</span></div>
+          <div class="preview-row"><span class="preview-number">03</span><div><b>Lateinische Quadrate</b><div class="preview-art">${previewLatin}</div></div><span class="preview-mark">?</span></div>
+        </div>
+      </div>
+      <div class="onboarding-footer"><span>20 AUFGABEN / SUBTEST</span><span>25 MINUTEN</span><span>SOFORT-FEEDBACK IM ÜBUNGSMODUS</span></div>
+    </section>`;
 }
 
 function renderHome(scrollTo = null) {
+  if (!sessionReady) return renderStartup();
+  if (!user) return renderOnboarding();
   setScreen('home');
   clearInterval(timerId);
-  const tags = ['Figurale Sequenzen', 'Mathematische Gleichungen', 'Lateinische Quadrate', 'niedrig', 'mittel', 'hoch', '20 Aufgaben', '25 Minuten', 'Seed-Wiederholung', 'Sofort-Feedback', 'Safe Exam Browser', 'Konto optional'];
+  const tags = ['Figurale Sequenzen', 'Mathematische Gleichungen', 'Lateinische Quadrate', 'niedrig', 'mittel', 'hoch', '20 Aufgaben', '25 Minuten', 'Seed-Wiederholung', 'Sofort-Feedback', 'Safe Exam Browser'];
   const tickerList = `<ul aria-hidden="true">${tags.map((t) => `<li>${t}</li>`).join('')}</ul>`;
   const previewFig = frameSVG([
     { shape: 'triangle', row: 1, col: 2, rot: 1, color: 'yellow' },
@@ -174,15 +222,15 @@ function renderHome(scrollTo = null) {
   const previewEq = '<div class="mini-eqs"><div><b>A</b> × 3 = <b>B</b></div><div><b>B</b> – <b>A</b> = 8</div></div>';
 
   app.innerHTML = `
-    <section class="hero">
-      <p class="eyebrow"><b>TestAS</b> · Kernmodul</p>
-      <h1>Üben wie in der <em>Prüfung.</em></h1>
-      <p class="lead">Alle drei Aufgabentypen des digitalen TestAS Kernmoduls – unendlich viele, selbst generierte Aufgaben, mit Zeitlimit oder mit sofortiger Rückmeldung.</p>
+    <section class="hero platform-hero" id="uebersicht">
+      <p class="eyebrow"><b>DEIN TRAININGSBEREICH</b> · KERNMODUL</p>
+      <h1>Willkommen zurück, <em>${esc(user.name || user.email)}</em>.</h1>
+      <p class="lead">Wähle deinen nächsten Schritt: Starte eine Prüfungssimulation oder übe gezielt einen Aufgabentyp.</p>
       <div class="ctas">
-        <button class="primary lg" data-go="pruefung">Prüfung starten</button>
-        <button class="lg" data-go="ueben">Einfach üben</button>
+        <button class="primary lg" data-go="pruefung">Prüfungssimulation</button>
+        <button class="lg" data-go="ueben">Gezielt üben</button>
       </div>
-      <p class="meta">Läuft im Browser · Konto optional${isSEB ? ' · <span class="badge seb">Safe Exam Browser erkannt</span>' : ''}</p>
+      <p class="meta">Dein Verlauf wird mit deinem Konto synchronisiert${isSEB ? ' · <span class="badge seb">Safe Exam Browser erkannt</span>' : ''}</p>
     </section>
     <div class="ticker" aria-hidden="true"><div class="ticker-track">${tickerList}${tickerList}</div></div>
 
@@ -506,16 +554,29 @@ let githubAvailable = false;  // false, wenn kein Auth-Server erreichbar ist (z.
 function renderAuthSlot() {
   const slot = document.getElementById('auth-slot');
   const note = document.getElementById('foot-note');
-  if (!authAvailable) { slot.innerHTML = ''; return; }
+  if (!authAvailable) {
+    slot.innerHTML = '';
+    note.textContent = 'Für den Trainingsbereich ist ein aktiver Konto-Server erforderlich.';
+    return;
+  }
   slot.innerHTML = user
-    ? `<span class="who" title="${esc(user.email)}">${esc(user.name || user.email)}</span>${isAdmin ? '<button class="small" id="admin">Admin</button>' : ''}<button class="small" id="account">Konto</button><button class="small" id="logout">Abmelden</button>`
-    : '<button class="small" id="login">Anmelden</button>';
-  note.textContent = 'Läuft im Browser. Ergebnisse werden lokal gespeichert, mit Konto zusätzlich auf dem Server.';
-  if (!user) { document.getElementById('login').onclick = () => openAuthDialog(); return; }
+    ? `<span class="who" title="${esc(user.email)}">${esc(user.name || user.email)}</span>${isAdmin ? '<button class="small" id="admin">Admin</button>' : ''}<button class="small" id="groups">Lerngruppen</button><button class="small" id="settings">Einstellungen</button><button class="small" id="logout">Abmelden</button>`
+    : '<button class="small" data-auth-mode="login">Anmelden</button><button class="small primary" data-auth-mode="register">Registrieren</button>';
+  note.textContent = user ? 'Dein Trainingsbereich ist mit deinem Konto verbunden.' : 'Registriere dich, um deinen persönlichen Trainingsbereich zu öffnen.';
+  if (!user) return;
   document.getElementById('logout').onclick = logout;
-  document.getElementById('account').onclick = () => openAccountDialog(user, (groupId) => {
-    if (screen === 'exam' || screen === 'intro') return false;
-    renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId });
+  document.getElementById('groups').onclick = () => renderGroupsPage({
+    app,
+    setScreen,
+    goHome: () => goHome(),
+    onOpenGroup: (groupId) => renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId }),
+  });
+  document.getElementById('settings').onclick = () => renderAccountSettings({
+    app,
+    setScreen,
+    goHome: () => goHome(),
+    user,
+    onUserUpdated: (updatedUser) => { user = updatedUser; renderAuthSlot(); },
   });
   if (isAdmin) document.getElementById('admin').onclick = () => { if (screen !== 'exam' && screen !== 'intro') renderAdmin({ app, setScreen, goHome: () => goHome() }); };
 }
@@ -547,11 +608,12 @@ async function logout() {
   await Auth.signOut();
   user = null;
   isAdmin = false;
-  document.getElementById('account-dialog')?.remove();
-  if (screen === 'admin') renderHome();
+  S = null;
+  P = null;
+  clearInterval(timerId);
   localStorage.removeItem(HISTORY_KEY); // auf geteilten Geräten keinen fremden Verlauf zurücklassen (liegt auf dem Server)
   renderAuthSlot();
-  refreshHistory();
+  renderHome();
 }
 
 function openAuthDialog(mode = 'login') {
@@ -601,17 +663,21 @@ function openAuthDialog(mode = 'login') {
     const s = await Auth.getSession();
     user = s.user;
     dlg.close();
+    sessionReady = true;
     await loadAccount();
     renderAuthSlot();
     await syncHistory();
-    refreshHistory();
+    renderHome();
   });
   setMode(mode);
   dlg.showModal();
   $('auth-email').focus();
 }
 
-app.addEventListener('click', (e) => { if (e.target.closest('[data-login]')) openAuthDialog(); });
+document.addEventListener('click', (e) => {
+  const authButton = e.target.closest('[data-auth-mode]');
+  if (authButton) openAuthDialog(authButton.dataset.authMode);
+});
 
 function goHome(target = null) {
   if (screen === 'exam' || screen === 'intro') return;
@@ -626,13 +692,14 @@ document.querySelectorAll('.site-nav a').forEach((a) => a.addEventListener('clic
   else goHome(a.dataset.go);
 }));
 
-renderHome();
+renderStartup();
 Auth.getSession().then(async (s) => {
   authAvailable = s.available;
   user = s.user;
   if (authAvailable) githubAvailable = Boolean((await Auth.getConfig()).github);
+  sessionReady = true;
   await loadAccount();
   renderAuthSlot();
   await syncHistory();
-  refreshHistory();
+  renderHome();
 });

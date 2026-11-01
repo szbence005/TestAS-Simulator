@@ -64,7 +64,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .spread { justify-content: space-between; }
 label { display: block; font-weight: 600; font-size: .9rem; margin: 14px 0 6px; color: var(--muted); }
-select, input[type=number], input[type=text], input[type=email], input[type=password] { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); color: var(--text); }
+select, input[type=number], input[type=text], input[type=email], input[type=password], input[type=search] { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); color: var(--text); }
 select { appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239b9ba4' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
 .badge { display: inline-block; font-family: var(--mono); font-size: .72rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); letter-spacing: .02em; }
 .badge.seb { color: var(--ok); border-color: var(--ok); }
@@ -82,6 +82,51 @@ select { appearance: none; padding-right: 34px; background-image: url("data:imag
 .hero .lead { font-size: clamp(1.05rem, 2.2vw, 1.25rem); color: var(--muted); max-width: 640px; }
 .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 14px; }
 .hero .meta { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+
+/* ---------- regisztráció előtti onboarding és belépett platform */
+body[data-screen="loading"] .site-nav, body[data-screen="onboarding"] .site-nav { display: none; }
+.startup-state { min-height: 55vh; display: grid; place-items: center; color: var(--muted); }
+.onboarding { padding: 38px 0 24px; }
+.onboarding-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.onboarding-heading .eyebrow { margin: 0; }
+.onboarding-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr); gap: 56px; align-items: center; padding: 58px 0 44px; }
+.onboarding-copy h1 { font-size: 3.8rem; font-weight: 800; line-height: 1.02; margin: 0 0 18px; }
+.onboarding-copy h1 em { color: var(--accent); font-style: normal; }
+.onboarding-copy .lead { max-width: 560px; color: var(--muted); font-size: 1.12rem; }
+.onboarding-actions { margin-top: 26px; }
+.onboarding-note { max-width: 480px; }
+.onboarding-footnote { margin-top: 28px; color: var(--muted); font-family: var(--mono); font-size: .78rem; }
+.onboarding-preview { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 22px; }
+.preview-head { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font: .72rem var(--mono); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.preview-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 22px; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); padding: 14px 0; }
+.preview-row:last-child { border-bottom: 0; padding-bottom: 2px; }
+.preview-row > div { min-width: 0; }
+.preview-row > div > b { font-size: .88rem; }
+.preview-number, .preview-mark { color: var(--accent); font-family: var(--mono); font-size: .82rem; }
+.preview-mark { text-align: right; font-size: 1.05rem; }
+.preview-art { min-height: 68px; display: flex; align-items: center; padding-top: 6px; }
+.preview-art .fm { width: 64px; height: 64px; }
+.preview-art .mini-eqs { font-size: .88rem; line-height: 1.55; }
+.preview-art .latin.mini { grid-template-columns: repeat(5, 16px); grid-auto-rows: 16px; }
+.preview-art .latin.mini div { font-size: .58rem; }
+.onboarding-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 24px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font: .7rem var(--mono); }
+.platform-hero { padding-top: 48px; }
+.platform-hero h1 { font-size: 3.1rem; line-height: 1.1; }
+.platform-hero .ctas { margin-top: 20px; }
+@media (max-width: 760px) {
+  .onboarding-grid { grid-template-columns: 1fr; gap: 32px; padding: 40px 0 30px; }
+  .onboarding-copy h1 { font-size: 3rem; }
+}
+@media (max-width: 560px) {
+  .onboarding { padding-top: 24px; }
+  .onboarding-heading .badge { display: none; }
+  .onboarding-grid { padding-top: 32px; }
+  .onboarding-copy h1 { font-size: 2.55rem; }
+  .onboarding-actions { align-items: stretch; }
+  .onboarding-actions button { flex: 1; padding-inline: 12px; }
+  .onboarding-footer { justify-content: flex-start; }
+  .platform-hero h1 { font-size: 2.25rem; overflow-wrap: anywhere; }
+}
 
 .ticker { overflow: hidden; border-block: 1px solid var(--line); margin: 28px 0 8px; }
 .ticker-track { display: flex; width: max-content; animation: ticker 38s linear infinite; }
@@ -237,10 +282,17 @@ code, .code { font-family: var(--mono); font-size: .92em; }
 .legend svg { vertical-align: middle; }
 .grp-list { list-style: none; margin: 0; padding: 0; }
 .grp-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.groups-section { margin: 30px 0; }
+.groups-section h2 { margin-bottom: 10px; }
+.settings-grid .card { align-self: start; }
+.settings-grid input[readonly] { color: var(--muted); cursor: not-allowed; }
+.settings-grid form > button { margin-top: 8px; }
 label.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); margin: 12px 0 0; }
 label.check input { margin-top: 4px; }
 @media (max-width: 560px) {
-  #auth-slot { gap: 6px; }
-  #auth-slot button.small { padding: 5px 10px; font-size: .85rem; }
+  #auth-slot { gap: 4px; }
+  #auth-slot .who { display: none; }
+  #auth-slot button.small { padding: 4px 6px; font-size: .72rem; }
+  .grp-list li { align-items: flex-start; flex-direction: column; }
 }
-@media (max-width: 400px) { .brand span { display: none; } }
+@media (max-width: 480px) { .brand span { display: none; } }

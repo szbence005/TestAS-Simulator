@@ -65,11 +65,11 @@ Any signed-in user can create a group; participants join with a code, and the gr
 
 **Workflow:**
 
-1. **Signed-in user** → Account → New group → enter a name; the join code (`XXXX-XXXX`) is assigned automatically.
-2. **Participants:** sign in → Account → enter the code → read the notice, consent → Join. Leaving is possible at any time (the group creator or an admin can also remove members).
-3. **Group creator** → Account → Your groups → Statistics: a table with exams/practice sessions, average per subtest, last activity and trend. Clicking a name shows that member's history (chart + all results). Two CSV exports are available (overview, all individual results; semicolon-separated, decimal comma, UTF-8, opens directly in Excel). Admins can view and manage all groups.
+1. **Signed-in user** → Lerngruppen → New group → enter a name; the join code (`XXXX-XXXX`) is assigned automatically.
+2. **Participants:** sign in → Lerngruppen → enter the code → read the notice, consent → Join. Leaving is possible at any time (the group creator or an admin can also remove members).
+3. **Group creator** → Lerngruppen → Your groups → Statistics: a table with exams/practice sessions, average per subtest, last activity and trend. Clicking a name shows that member's history (chart + all results). Two CSV exports are available (overview, all individual results; semicolon-separated, decimal comma, UTF-8, opens directly in Excel). Admins can view and manage all groups.
 
-Admins also have a **System overview** with all registered users, usage totals, overall exam/practice performance, and per-user history.
+Admins also have a **System overview** with all registered users, usage totals, overall exam/practice performance, and per-user history. **Einstellungen** lets signed-in users change their display name or password; the current email address is read-only.
 
 **Privacy:** explicit consent is required when joining (the server enforces it). The group creator and admins can see a member's name, email and all stored results, including earlier ones. Only results saved while logged in exist on the server; anyone who has not joined is invisible to the group creator. For minors, obtain parental consent where required (GDPR Art. 8; the age threshold in Hungary is 16).
 
