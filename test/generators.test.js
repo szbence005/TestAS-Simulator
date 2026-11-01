@@ -12,6 +12,7 @@ test('Gleichungen: pontosan egy megoldás, és az a tárolt megoldás', () => {
     for (let i = 0; i < 8; i++) {
       const t = generateEquation(rng, level);
       const n = Object.keys(t.solution).length;
+      assert.equal(t.equations.length, n);
       const sols = countSolutions(t.equations, n);
       assert.equal(sols.length, 1, t.equations.join(' | '));
       assert.deepEqual(Object.fromEntries(sols[0].map((v, k) => [NAMES[k], v])), t.solution);

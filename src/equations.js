@@ -125,13 +125,15 @@ export function generateEquation(rng, level) {
     const sol = Array.from({ length: n }, () => rng.int(1, SOLUTION_MAX[level]));
     let surv = all;
     const eqs = [];
-    while (surv.length > 1 && eqs.length < n) {
+    while (eqs.length < n) {
       let best = null;
       for (let k = 0; k < 6; k++) {
         const c = candidate(rng, sol, n, level);
         if (!c) continue;
         const f = surv.filter(c.test);
-        if (f.length < surv.length && (!best || f.length < best.f.length)) best = { c, f };
+        const reducesCandidates = f.length < surv.length;
+        const addsEquation = surv.length === 1 && f.length === 1 && !eqs.some((equation) => equation.text === c.text);
+        if (reducesCandidates && (!best || f.length < best.f.length) || addsEquation) best = { c, f };
       }
       if (!best) break;
       eqs.push(best.c);
