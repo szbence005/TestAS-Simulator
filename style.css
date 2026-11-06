@@ -316,19 +316,32 @@ code, .code { font-family: var(--mono); font-size: .92em; }
 .grp-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .groups-section { margin: 30px 0; }
 .groups-section h2 { margin-bottom: 10px; }
-.settings-grid .card { align-self: start; }
-.settings-grid input[readonly] { color: var(--muted); cursor: not-allowed; }
-.settings-grid form > button { margin-top: 8px; }
-.settings-actions { margin: 18px 0 34px; }
-.account-danger { max-width: 680px; border-top: 1px solid var(--line); padding-top: 22px; }
-.account-danger h2 { color: var(--bad); }
-.account-danger .row.nowrap { align-items: stretch; }
-.account-danger .row.nowrap button { flex: 0 0 auto; }
-.account-info { max-width: 640px; }
+.account-info { max-width: 680px; }
+/* Kontoeinstellungen: alle Bereiche gleich aufgebaut (Karte, Titel, Beschreibung, Inhalt, Meldung, Aktionen) */
+.account-page-head { margin-top: 14px; }
+.settings-stack { max-width: 680px; display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.settings-card { margin: 0; padding: 22px; }
+.settings-card h2 { font-size: 1.15rem; margin: 0 0 4px; }
+.settings-desc { margin: 0 0 16px; color: var(--muted); font-size: .9rem; }
+.settings-card form { display: flex; flex-direction: column; }
+.settings-card label { margin: 0 0 6px; }
+.settings-card input + label, .settings-card input + .form-note + label { margin-top: 16px; }
+.settings-card input[readonly] { color: var(--muted); cursor: not-allowed; }
+.settings-card .form-note { margin: 8px 0 0; }
+.settings-card .form-note:empty, .settings-card .form-error:empty { margin: 0; min-height: 0; }
+.settings-card .form-error { min-height: 0; margin: 8px 0 0; }
+.settings-card .card-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 18px; }
+.settings-card.danger-card { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.settings-card.danger-card h2 { color: var(--bad); }
+.settings-card label.check { margin: 0; }
 .account-info-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .account-info > button { margin-top: 18px; }
 label.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); margin: 12px 0 0; }
 label.check input { margin-top: 4px; }
+/* Lerngruppen-Link in der Hauptnavigation nur auf den Konto-Seiten ausblenden */
+body[data-screen="account-info"] .site-nav a[data-page="groups"],
+body[data-screen="settings"] .site-nav a[data-page="groups"],
+body[data-screen="admin"] .site-nav a[data-page="groups"] { display: none; }
 @media (max-width: 560px) {
   .site-nav { display: flex; gap: 9px; }
   .site-nav a { font-size: .78rem; }
@@ -344,7 +357,6 @@ label.check input { margin-top: 4px; }
   .site-nav { gap: 7px; }
   .site-nav a { font-size: .72rem; }
   .profile-name { display: none; }
-  .account-danger .row.nowrap { flex-wrap: wrap; }
 }
 
 /* Lerngruppen-Unterseite: Gruppentests */
@@ -375,4 +387,3 @@ label.check input { margin-top: 4px; }
 .pop-menu a:hover { background: var(--surface-2); }
 @media (max-width: 560px) { .grp-list li { flex-direction: row; align-items: center; } }
 [hidden] { display: none !important; }
-.notify-card { max-width: 680px; margin: 18px 0; }

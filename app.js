@@ -558,7 +558,6 @@ function renderAuthSlot() {
         <nav class="profile-menu" id="profile-menu" aria-label="Profilmenü" hidden>
           <a href="#kontoinformationen" id="profile-info">Kontoinformationen</a>
           <a href="#einstellungen" id="profile-settings">Einstellungen</a>
-          <a href="gruppen.html" id="profile-groups">Lerngruppen</a>
           ${isAdmin ? '<a href="#admin" id="profile-admin">Admin-Dashboard</a>' : ''}
         </nav>
       </div>`
@@ -578,7 +577,6 @@ function renderAuthSlot() {
     renderAccountInfo({ app, setScreen, goHome: () => goHome(), user, onOpenSettings: () => renderAccountSettingsPage() });
   };
   document.getElementById('profile-settings').onclick = (event) => { event.preventDefault(); closeMenu(); renderAccountSettingsPage(); };
-  document.getElementById('profile-groups').onclick = (event) => { event.preventDefault(); closeMenu(); openPlatformPage('groups'); };
   document.getElementById('profile-admin')?.addEventListener('click', (event) => {
     event.preventDefault(); closeMenu(); renderAdmin({ app, setScreen, goHome: () => goHome() });
   });

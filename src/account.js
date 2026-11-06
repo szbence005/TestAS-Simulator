@@ -9,7 +9,7 @@ export function renderAccountInfo({ app, setScreen, goHome, user, onOpenSettings
   setScreen('account-info');
   const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString('de-DE') : '–';
   app.innerHTML = `
-    <div class="row" style="margin-top:14px"><button type="button" id="info-home">‹ Startseite</button></div>
+    <div class="row account-page-head"><button type="button" id="info-home">‹ Startseite</button></div>
     <h1>Kontoinformationen</h1>
     <p class="lead muted">Die persönlichen Daten deines Kontos.</p>
     <section class="card account-info">
@@ -26,12 +26,13 @@ export function renderAccountInfo({ app, setScreen, goHome, user, onOpenSettings
 export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpdated, onAccountDeleted, onLogout }) {
   setScreen('settings');
   app.innerHTML = `
-    <div class="row" style="margin-top:14px"><button type="button" id="settings-home">‹ Startseite</button></div>
+    <div class="row account-page-head"><button type="button" id="settings-home">‹ Startseite</button></div>
     <h1>Kontoeinstellungen</h1>
-    <p class="lead muted">Verwalte deine Profildaten und Zugangssicherheit.</p>
-    <div class="grid settings-grid">
-      <section class="card">
+    <p class="lead muted">Verwalte deine Profildaten, Benachrichtigungen und Zugangssicherheit.</p>
+    <div class="settings-stack">
+      <section class="card settings-card">
         <h2>Profil</h2>
+        <p class="settings-desc">So erscheinst du in deinen Lerngruppen.</p>
         <form id="profile-form">
           <label for="profile-name">Anzeigename</label>
           <input id="profile-name" name="name" type="text" autocomplete="name" maxlength="120" required value="${esc(user.name)}">
@@ -40,11 +41,12 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
           <p id="email-note" class="form-note">Die E-Mail-Adresse ist dein Anmeldename und kann hier nicht geändert werden.</p>
           <p id="profile-status" class="form-note" role="status" aria-live="polite"></p>
           <p class="form-error" id="profile-error" role="alert"></p>
-          <button type="submit" class="primary" id="profile-save">Änderungen speichern</button>
+          <div class="card-actions"><button type="submit" class="primary" id="profile-save">Änderungen speichern</button></div>
         </form>
       </section>
-      <section class="card">
+      <section class="card settings-card">
         <h2>Passwort</h2>
+        <p class="settings-desc">Mindestens 8 Zeichen. Andere aktive Sitzungen werden nach der Änderung abgemeldet.</p>
         <form id="password-form">
           <label for="current-password">Aktuelles Passwort</label>
           <input id="current-password" type="password" autocomplete="current-password" required>
@@ -52,26 +54,31 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
           <input id="new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
           <label for="confirm-password">Neues Passwort wiederholen</label>
           <input id="confirm-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
-          <p class="form-note">Mindestens 8 Zeichen. Andere aktive Sitzungen werden nach der Änderung abgemeldet.</p>
           <p id="password-status" class="form-note" role="status" aria-live="polite"></p>
           <p class="form-error" id="password-error" role="alert"></p>
-          <button type="submit" class="primary" id="password-save">Passwort ändern</button>
+          <div class="card-actions"><button type="submit" class="primary" id="password-save">Passwort ändern</button></div>
         </form>
       </section>
-    </div>
-    <div id="notify-slot"></div>
-    <div class="row settings-actions"><button type="button" id="settings-logout">Abmelden</button></div>
-    <section class="account-danger">
-      <h2>Konto löschen</h2>
-      <p class="muted">Dein Konto, deine gespeicherten Ergebnisse und deine Gruppen werden dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.</p>
-      <form id="delete-account-form">
-        <label for="delete-password">Aktuelles Passwort (falls vorhanden)</label>
-        <input id="delete-password" type="password" autocomplete="current-password">
-        <label for="delete-confirm">Zur Bestätigung LÖSCHEN eingeben</label>
-        <div class="row nowrap"><input id="delete-confirm" type="text" autocomplete="off"><button type="submit" class="danger" id="delete-account" disabled>Konto endgültig löschen</button></div>
-        <p class="form-error" id="delete-error" role="alert"></p>
-      </form>
-    </section>`;
+      <div id="notify-slot"></div>
+      <section class="card settings-card">
+        <h2>Abmelden</h2>
+        <p class="settings-desc">Meldet dich auf diesem Gerät ab.</p>
+        <div class="card-actions"><button type="button" id="settings-logout">Abmelden</button></div>
+      </section>
+      <section class="card settings-card danger-card">
+        <h2>Konto löschen</h2>
+        <p class="settings-desc">Dein Konto, deine gespeicherten Ergebnisse und deine Gruppen werden dauerhaft gelöscht. Das kann nicht rückgängig gemacht werden.</p>
+        <form id="delete-account-form">
+          <label for="delete-password">Aktuelles Passwort</label>
+          <input id="delete-password" type="password" autocomplete="current-password" aria-describedby="delete-pw-note">
+          <p id="delete-pw-note" class="form-note">Nur nötig, wenn dein Konto ein Passwort hat.</p>
+          <label for="delete-confirm">Zur Bestätigung LÖSCHEN eingeben</label>
+          <input id="delete-confirm" type="text" autocomplete="off">
+          <p class="form-error" id="delete-error" role="alert"></p>
+          <div class="card-actions"><button type="submit" class="danger" id="delete-account" disabled>Konto endgültig löschen</button></div>
+        </form>
+      </section>
+    </div>`;
 
   const $ = (id) => document.getElementById(id);
   $('settings-home').onclick = goHome;
@@ -81,8 +88,9 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
   G.getAccount().then((account) => {
     const slot = $('notify-slot');
     if (!slot || !account?.mail?.available) return;
-    slot.innerHTML = `<section class="card notify-card">
+    slot.innerHTML = `<section class="card settings-card">
       <h2>E-Mail-Benachrichtigungen</h2>
+      <p class="settings-desc">Die Änderung wird sofort gespeichert.</p>
       <label class="check"><input type="checkbox" id="notify-tests"${account.mail.notifyTests ? ' checked' : ''}> Mich per E-Mail informieren, wenn in meinen Lerngruppen ein neuer Test geplant wird.</label>
       <p id="notify-status" class="form-note" role="status" aria-live="polite"></p>
     </section>`;
