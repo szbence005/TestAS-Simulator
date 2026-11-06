@@ -124,3 +124,13 @@ test/                           node:test tests
 ## License
 
 MIT
+
+## E-Mails (Brevo)
+
+Optional: With a [Brevo](https://www.brevo.com) account (free plan: 300 e-mails/day) the server sends
+
+- a **confirmation link** after registration (the account can only be used once the address is confirmed; existing accounts get a new link when they next try to sign in),
+- a **password-reset link** ("Passwort vergessen?", valid for one hour),
+- an optional **notification when a group test is planned** (opt-in per user under *Kontoeinstellungen*, off by default).
+
+Set `BREVO_API_KEY`, `MAIL_FROM` (a sender verified in Brevo) and optionally `MAIL_FROM_NAME` (see `.env.example`). The API is used over HTTPS, not SMTP, because Render's free plan blocks outgoing SMTP ports. **Without these variables nothing is sent and e-mail confirmation is not required**, so nobody gets locked out. Code: `server/mail.js`; the reset page is `passwort.html`.

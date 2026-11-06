@@ -374,3 +374,5 @@ label.check input { margin-top: 4px; }
 .pop-menu a { display: block; padding: 9px 10px; border-radius: 4px; color: var(--text); font-size: .9rem; text-decoration: none; white-space: nowrap; }
 .pop-menu a:hover { background: var(--surface-2); }
 @media (max-width: 560px) { .grp-list li { flex-direction: row; align-items: center; } }
+[hidden] { display: none !important; }
+.notify-card { max-width: 680px; margin: 18px 0; }

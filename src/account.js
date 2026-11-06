@@ -1,4 +1,5 @@
 import * as Auth from './auth.js';
+import * as G from './groups.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -58,6 +59,7 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
         </form>
       </section>
     </div>
+    <div id="notify-slot"></div>
     <div class="row settings-actions"><button type="button" id="settings-logout">Abmelden</button></div>
     <section class="account-danger">
       <h2>Konto löschen</h2>
@@ -74,6 +76,25 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
   const $ = (id) => document.getElementById(id);
   $('settings-home').onclick = goHome;
   $('settings-logout').onclick = onLogout;
+
+  // E-Mail-Benachrichtigungen (nur wenn der Server E-Mails senden kann)
+  G.getAccount().then((account) => {
+    const slot = $('notify-slot');
+    if (!slot || !account?.mail?.available) return;
+    slot.innerHTML = `<section class="card notify-card">
+      <h2>E-Mail-Benachrichtigungen</h2>
+      <label class="check"><input type="checkbox" id="notify-tests"${account.mail.notifyTests ? ' checked' : ''}> Mich per E-Mail informieren, wenn in meinen Lerngruppen ein neuer Test geplant wird.</label>
+      <p id="notify-status" class="form-note" role="status" aria-live="polite"></p>
+    </section>`;
+    const box = $('notify-tests');
+    box.onchange = async () => {
+      box.disabled = true;
+      const result = await G.saveSettings({ notifyTests: box.checked });
+      box.disabled = false;
+      if (!result.ok) { box.checked = !box.checked; $('notify-status').textContent = 'Das hat nicht geklappt. Bitte später erneut versuchen.'; return; }
+      $('notify-status').textContent = box.checked ? 'Benachrichtigungen sind eingeschaltet.' : 'Benachrichtigungen sind ausgeschaltet.';
+    };
+  });
   $('profile-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const name = $('profile-name').value.trim();

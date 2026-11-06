@@ -19,3 +19,9 @@ services:
         sync: false
       - key: GITHUB_CLIENT_SECRET
         sync: false
+      - key: BREVO_API_KEY          # Brevo → SMTP & API → API-Schlüssel (nur im Render-Dashboard eintragen, nie ins Repo)
+        sync: false
+      - key: MAIL_FROM              # in Brevo verifizierte Absenderadresse
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Test-AS Simulation

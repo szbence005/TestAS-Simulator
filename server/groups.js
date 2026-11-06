@@ -1,6 +1,7 @@
 // Lerngruppen: Teilnehmer treten mit einem Code bei, der Admin (ADMIN_EMAILS) sieht die Ergebnisse der Mitglieder.
 import { randomUUID } from 'node:crypto';
-import { sql } from './auth.js';
+import { sql, baseURL } from './auth.js';
+import { mailEnabled, sendMail, newTestMail } from './mail.js';
 import { TYPE_KEYS, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc, parseTestInput, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
 
 const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS);
@@ -22,6 +23,8 @@ export async function ensureGroupTables() {
     id TEXT PRIMARY KEY, group_id TEXT NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL, minutes INTEGER NOT NULL,
     seed INTEGER NOT NULL, starts_at ${sql.bigint} NOT NULL, created_at ${sql.bigint} NOT NULL)`);
   await sql.run('CREATE INDEX IF NOT EXISTS group_tests_group ON group_tests (group_id)');
+  // E-Mail-Einstellungen je Nutzer (Opt-in, standardmäßig aus)
+  await sql.run('CREATE TABLE IF NOT EXISTS user_mail_prefs (user_id TEXT PRIMARY KEY, notify_tests INTEGER NOT NULL DEFAULT 0)');
 }
 
 const num = (x) => (x == null ? x : Number(x)); // BIGINT/COUNT kommen aus Postgres als String
@@ -99,6 +102,13 @@ const db = {
     `SELECT user_id, ts, mode, type, correct, total, seconds, seed FROM history
      WHERE user_id ${uid ? '= ?' : 'IN (SELECT user_id FROM study_group_members WHERE group_id = ?)'} ORDER BY ts`,
     [uid ?? gid])).map((e) => ({ ...e, ts: num(e.ts) })),
+  notifyRecipients: async (gid) => (await sql.all(
+    `SELECT u.name, u.email FROM study_group_members m JOIN "user" u ON u.id = m.user_id
+     JOIN user_mail_prefs p ON p.user_id = m.user_id
+     WHERE m.group_id = ? AND p.notify_tests = 1 AND u."emailVerified"`, [gid])).map((r) => ({ name: r.name, email: r.email })),
+  mailPrefs: async (uid) => ({ notifyTests: Number((await sql.all('SELECT notify_tests FROM user_mail_prefs WHERE user_id = ?', [uid]))[0]?.notify_tests ?? 0) === 1 }),
+  setMailPrefs: (uid, notifyTests) => sql.run(
+    'INSERT INTO user_mail_prefs (user_id, notify_tests) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET notify_tests = excluded.notify_tests', [uid, notifyTests ? 1 : 0]),
   isMember: async (gid, uid) => (await sql.all('SELECT 1 AS x FROM study_group_members WHERE group_id = ? AND user_id = ?', [gid, uid])).length > 0,
 };
 
@@ -197,6 +207,24 @@ async function exportGroup(req, res, gid, group, sendCsv) {
     ['Name', 'E-Mail', 'Prüfungen', 'Übungen', ...TYPE_KEYS.map((t) => `Prüfung Ø % ${t}`), ...TYPE_KEYS.map((t) => `Übung Ø % ${t}`), 'Zuletzt aktiv (UTC)', 'Trend (Prozentpunkte)'], rows));
 }
 
+const KIND_LABEL = { all: 'Kernmodul (alle drei Subtests)', figural: 'Figurale Sequenzen', gleichungen: 'Mathematische Gleichungen', quadrate: 'Lateinische Quadrate' };
+const MAX_NOTIFY = 100; // Brevo Gratis-Tarif: 300 E-Mails pro Tag
+
+/** Mitglieder, die Benachrichtigungen aktiviert haben, per E-Mail über einen neuen Test informieren (läuft im Hintergrund). */
+async function notifyNewTest(group, test) {
+  if (!mailEnabled) return;
+  const recipients = (await db.notifyRecipients(group.id)).slice(0, MAX_NOTIFY);
+  for (const person of recipients) {
+    await sendMail({
+      to: person,
+      ...newTestMail(person, {
+        groupName: group.name, title: test.title, kindLabel: KIND_LABEL[test.kind] ?? test.kind,
+        minutes: test.minutes, startsAt: test.startsAt, url: `${baseURL}/gruppen.html#${encodeURIComponent(group.id)}`,
+      }),
+    });
+  }
+}
+
 const slug = (s) => s.normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'gruppe';
 
 /**
@@ -226,6 +254,7 @@ async function testsApi({ req, res, gid, group, owner, user, tid, method, send, 
       if (parsed.error) return send(res, 400, { error: parsed.error });
       if ((await db.testCount(gid)) >= MAX_TESTS_PER_GROUP) return send(res, 400, { error: 'limit' });
       const id = await db.createTest(gid, parsed.test);
+      notifyNewTest(group, { ...parsed.test, id }).catch((error) => console.error('Benachrichtigung fehlgeschlagen:', error.message));
       return send(res, 200, { test: shapeTest({ ...parsed.test, id }, { owner: true, now }) });
     }
     return send(res, 405, { error: 'method' });
@@ -258,8 +287,18 @@ export async function groupsApi(req, res, pathname, ctx) {
   if (!user) return send(res, 401, { error: 'unauthorized' });
 
   /* ---- Konto des angemeldeten Nutzers */
-  if (area === 'account' && method === 'GET') {
-    return send(res, 200, { user: { id: user.id, name: user.name, email: user.email }, admin: isAdmin(user), groups: await db.mine(user.id), createdGroups: await db.created(user.id) });
+  if (area === 'account' && a === 'settings' && method === 'POST') {
+    const body = await readJson(req);
+    if (typeof body.notifyTests !== 'boolean') return send(res, 400, { error: 'invalid' });
+    await db.setMailPrefs(user.id, body.notifyTests);
+    return send(res, 200, { mail: { available: mailEnabled, ...(await db.mailPrefs(user.id)) } });
+  }
+  if (area === 'account' && !a && method === 'GET') {
+    return send(res, 200, {
+      user: { id: user.id, name: user.name, email: user.email }, admin: isAdmin(user),
+      mail: { available: mailEnabled, ...(await db.mailPrefs(user.id)) },
+      groups: await db.mine(user.id), createdGroups: await db.created(user.id),
+    });
   }
 
   if (area === 'groups') {

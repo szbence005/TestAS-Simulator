@@ -539,6 +539,7 @@ if (isSEB) document.getElementById('auth-slot').insertAdjacentHTML('beforebegin'
 let user = null;            // angemeldeter Nutzer oder null
 let authAvailable = false;
 let isAdmin = false;          // laut Server (ADMIN_EMAILS); nur für die Anzeige des Admin-Buttons, der Server prüft selbst
+let mailAvailable = false;    // Server kann E-Mails senden: Bestätigung der Adresse und „Passwort vergessen“
 let githubAvailable = false;  // false, wenn kein Auth-Server erreichbar ist (z. B. GitHub Pages)
 
 function renderAuthSlot() {
@@ -662,6 +663,7 @@ function openAuthDialog(mode = 'login') {
       <label for="auth-email">E-Mail</label><input id="auth-email" type="email" autocomplete="email" required>
       <label for="auth-pass">Passwort</label><input id="auth-pass" type="password" required minlength="8">
       <p class="form-note" id="pass-note">Mindestens 8 Zeichen.</p>
+      <p class="form-note" id="forgot-row"><button type="button" class="link" id="auth-forgot">Passwort vergessen?</button></p>
       <p class="form-error" id="auth-error" role="alert"></p>
       <div class="row"><button type="button" id="auth-cancel">Abbrechen</button><button type="submit" class="primary" id="auth-submit"></button></div>
     </form>`;
@@ -670,14 +672,25 @@ function openAuthDialog(mode = 'login') {
   const setMode = (m) => {
     mode = m;
     dlg.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
-    $('name-field').hidden = m === 'login';
-    $('pass-note').hidden = m === 'login';
+    const reset = m === 'reset';
+    dlg.querySelector('.auth-tabs').hidden = reset;
+    $('name-field').hidden = m !== 'register';
+    $('pass-note').hidden = m !== 'register';
+    $('auth-pass').hidden = reset;
+    dlg.querySelector('label[for="auth-pass"]').hidden = reset;
+    $('auth-pass').required = !reset;
+    $('forgot-row').hidden = m !== 'login' || !mailAvailable;
     $('auth-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
-    $('auth-submit').textContent = m === 'login' ? 'Anmelden' : 'Konto erstellen';
+    $('auth-submit').textContent = reset ? 'Link senden' : m === 'login' ? 'Anmelden' : 'Konto erstellen';
     $('auth-error').textContent = '';
   };
   dlg.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
   $('auth-cancel').onclick = () => dlg.close();
+  $('auth-forgot').onclick = () => setMode('reset');
+  const showNotice = (title, text) => {
+    dlg.querySelector('form').innerHTML = `<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button type="button" class="primary" id="auth-ok">Schließen</button></div>`;
+    dlg.querySelector('#auth-ok').onclick = () => dlg.close();
+  };
   if (githubAvailable) $('auth-github').onclick = async () => { const r = await Auth.signInGithub(); if (!r.ok) $('auth-error').textContent = r.error; };
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelector('form').addEventListener('submit', async (e) => {
@@ -685,6 +698,15 @@ function openAuthDialog(mode = 'login') {
     const name = $('auth-name').value.trim();
     const email = $('auth-email').value.trim();
     const pass = $('auth-pass').value;
+    if (mode === 'reset') {
+      if (!email) { $('auth-error').textContent = 'Bitte E-Mail eingeben.'; return; }
+      $('auth-submit').disabled = true;
+      const sent = await Auth.requestPasswordReset(email);
+      $('auth-submit').disabled = false;
+      if (!sent.ok) { $('auth-error').textContent = sent.error; return; }
+      showNotice('E-Mail unterwegs', `Wenn zu ${email} ein Konto existiert, haben wir einen Link zum Zurücksetzen des Passworts gesendet. Er ist eine Stunde gültig.`);
+      return;
+    }
     if (!email || !pass) { $('auth-error').textContent = 'Bitte E-Mail und Passwort eingeben.'; return; }
     if (mode === 'register' && pass.length < 8) { $('auth-error').textContent = 'Das Passwort braucht mindestens 8 Zeichen.'; return; }
     $('auth-submit').disabled = true;
@@ -692,6 +714,10 @@ function openAuthDialog(mode = 'login') {
     $('auth-submit').disabled = false;
     if (!r.ok) { $('auth-error').textContent = r.error; return; }
     const s = await Auth.getSession();
+    if (mode === 'register' && !s.user && mailAvailable) { // Konto angelegt, aber erst nach Bestätigung der Adresse nutzbar
+      showNotice('Fast geschafft', `Wir haben eine E-Mail an ${email} gesendet. Bitte klicke auf den Link darin, um deine Adresse zu bestätigen – danach bist du angemeldet. Schau auch im Spam-Ordner nach.`);
+      return;
+    }
     user = s.user;
     dlg.close();
     sessionReady = true;
@@ -735,7 +761,7 @@ async function startGroupTest(gid, tid) {
 }
 
 async function openFromLocation() {
-  if (!user) return;
+  if (!user) { if (location.hash === '#login' && authAvailable) openAuthDialog('login'); return; }
   const ref = new URLSearchParams(location.search).get('gruppentest');
   if (ref) {
     window.history.replaceState(null, '', location.pathname); // Seite neu laden startet den Test nicht noch einmal
@@ -752,7 +778,7 @@ renderStartup();
 Auth.getSession().then(async (s) => {
   authAvailable = s.available;
   user = s.user;
-  if (authAvailable) githubAvailable = Boolean((await Auth.getConfig()).github);
+  if (authAvailable) { const config = await Auth.getConfig(); githubAvailable = Boolean(config.github); mailAvailable = Boolean(config.mail); }
   sessionReady = true;
   await loadAccount();
   renderAuthSlot();

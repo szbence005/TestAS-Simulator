@@ -3,6 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { betterAuth } from 'better-auth';
+import { mailEnabled, sendMail, verifyEmailMail, resetPasswordMail } from './mail.js';
 
 const port = Number(process.env.PORT) || 8080;
 const COLS = 'ts, mode, type, correct, total, seconds, seed';
@@ -78,13 +79,29 @@ const validUrl = (name) => {
   console.warn(`${name}="${v}" ist keine gültige URL (https://… erwartet) und wird ignoriert.`);
   return null;
 };
-const baseURL = validUrl('BETTER_AUTH_URL') ?? validUrl('RENDER_EXTERNAL_URL') ?? `http://localhost:${port}`;
+export const baseURL = validUrl('BETTER_AUTH_URL') ?? validUrl('RENDER_EXTERNAL_URL') ?? `http://localhost:${port}`;
 
 export const auth = betterAuth({
   database,
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
-  emailAndPassword: { enabled: true, minPasswordLength: 8 },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 8,
+    // Nur mit funktionierendem Mailversand verlangen – sonst könnte sich niemand mehr anmelden
+    requireEmailVerification: mailEnabled,
+    resetPasswordTokenExpiresIn: 3600,
+    revokeSessionsOnPasswordReset: true,
+    ...(mailEnabled ? { sendResetPassword: async ({ user, url }) => { void sendMail({ to: user, ...resetPasswordMail(user, url) }); } } : {}),
+  },
+  ...(mailEnabled ? {
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: true, // bestehende Konten ohne Bestätigung bekommen beim Anmelden einen neuen Link
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => { void sendMail({ to: user, ...verifyEmailMail(user, url) }); },
+    },
+  } : {}),
   user: {
     deleteUser: {
       enabled: true,
@@ -94,6 +111,7 @@ export const auth = betterAuth({
         await sql.run('DELETE FROM study_groups WHERE created_by = ?', [deletedUser.id]);
         await sql.run('DELETE FROM study_group_members WHERE user_id = ?', [deletedUser.id]);
         await sql.run('DELETE FROM history WHERE user_id = ?', [deletedUser.id]);
+        await sql.run('DELETE FROM user_mail_prefs WHERE user_id = ?', [deletedUser.id]);
       },
     },
   },

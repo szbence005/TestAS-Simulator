@@ -23,6 +23,9 @@ const ERRORS = {
   INVALID_PASSWORD: 'Das aktuelle Passwort ist falsch.',
   PASSWORD_TOO_SHORT: 'Das Passwort ist zu kurz (mindestens 8 Zeichen).',
   PASSWORD_TOO_LONG: 'Das Passwort ist zu lang.',
+  EMAIL_NOT_VERIFIED: 'Bitte bestätige zuerst deine E-Mail-Adresse. Wir haben dir einen neuen Link geschickt.',
+  INVALID_TOKEN: 'Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.',
+  TOKEN_EXPIRED: 'Der Link ist abgelaufen. Bitte fordere einen neuen an.',
 };
 const errorText = (r) => ERRORS[r.data?.code] ?? (r.status === 429 ? 'Zu viele Versuche. Bitte kurz warten.' : `Das hat nicht geklappt (Fehler ${r.status}).`);
 
@@ -38,7 +41,7 @@ export async function getSession() {
 
 export async function signUp(name, email, password) {
   try {
-    const r = await post('/api/auth/sign-up/email', { name, email, password });
+    const r = await post('/api/auth/sign-up/email', { name, email, password, callbackURL: '/' });
     return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
   } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
 }
@@ -46,6 +49,21 @@ export async function signUp(name, email, password) {
 export async function signIn(email, password) {
   try {
     const r = await post('/api/auth/sign-in/email', { email, password });
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
+// Passwort vergessen: sendet einen Link per E-Mail (die Antwort verrät nicht, ob es die Adresse gibt)
+export async function requestPasswordReset(email) {
+  try {
+    const r = await post('/api/auth/request-password-reset', { email, redirectTo: '/passwort.html' });
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
+export async function resetPassword(newPassword, token) {
+  try {
+    const r = await post('/api/auth/reset-password', { newPassword, token });
     return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
   } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
 }

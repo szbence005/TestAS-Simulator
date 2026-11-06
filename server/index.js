@@ -9,13 +9,14 @@ try {
   mods = {
     ...(await import('./auth.js')),
     ...(await import('./groups.js')),
+    ...(await import('./mail.js')),
     ...(await import('better-auth/node')),
   };
 } catch (err) {
   console.error('Better Auth konnte nicht geladen werden. Bitte zuerst "npm install" ausführen.\n', err.message);
   process.exit(1);
 }
-const { auth, history, githubEnabled, toNodeHandler, fromNodeHeaders, groupsApi, ensureGroupTables } = mods;
+const { auth, history, githubEnabled, mailEnabled, toNodeHandler, fromNodeHeaders, groupsApi, ensureGroupTables } = mods;
 
 // Datenbanktabellen von Better Auth anlegen (user, session, account, verification).
 // Je nach Version liegt getMigrations an einem anderen Ort – wir probieren die bekannten Pfade.
@@ -37,7 +38,7 @@ await ensureGroupTables();
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 // Nur diese Dateien werden ausgeliefert – nicht server/, data/ oder .git
-const isPublic = (p) => ['/index.html', '/app.js', '/style.css', '/gruppen.html', '/gruppen.js'].includes(p) || /^\/src\/[\w-]+\.js$/.test(p);
+const isPublic = (p) => ['/index.html', '/app.js', '/style.css', '/gruppen.html', '/gruppen.js', '/passwort.html'].includes(p) || /^\/src\/[\w-]+\.js$/.test(p);
 
 const authHandler = toNodeHandler(auth);
 const MODES = new Set(['exam', 'practice']);
@@ -87,9 +88,9 @@ const server = http.createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (pathname.startsWith('/api/auth/')) return await authHandler(req, res);
-    if (pathname === '/api/config') return send(res, 200, { github: githubEnabled });
+    if (pathname === '/api/config') return send(res, 200, { github: githubEnabled, mail: mailEnabled });
     if (pathname === '/api/history') return await historyApi(req, res);
-    if (pathname === '/api/account' || pathname.startsWith('/api/groups/') || pathname.startsWith('/api/admin/')) return await groupsRoute(req, res, pathname);
+    if (pathname === '/api/account' || pathname.startsWith('/api/account/') || pathname.startsWith('/api/groups/') || pathname.startsWith('/api/admin/')) return await groupsRoute(req, res, pathname);
     const p = pathname === '/' ? '/index.html' : pathname === '/gruppen' ? '/gruppen.html' : pathname;
     if (!isPublic(p)) return res.writeHead(404).end('Not found');
     const data = await readFile(resolve(root, '.' + p));

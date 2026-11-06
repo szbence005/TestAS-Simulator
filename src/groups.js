@@ -17,6 +17,11 @@ export const getAccount = async () => {
   if (r.ok) cache.set('account', r.data);
   return r.ok ? r.data : null;
 };
+export const saveSettings = async (settings) => {
+  const r = await safe(() => post('/api/account/settings', settings));
+  if (r.ok && cache.has('account')) cache.set('account', { ...cache.get('account'), mail: r.data.mail });
+  return r;
+};
 export const createGroup = (name) => safe(() => post('/api/groups/create', { name }));
 export const ownedGroups = () => safe(() => call('/api/groups/created'));
 export const ownedGroup = (gid) => safe(() => call(`/api/groups/${id(gid)}`));
