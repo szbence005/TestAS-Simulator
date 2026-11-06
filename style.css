@@ -354,10 +354,6 @@ label.check input { margin-top: 4px; }
 .theme-option:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 .theme-option input { margin: 0; accent-color: var(--accent); }
 .export-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-/* Lerngruppen-Link in der Hauptnavigation nur auf den Konto-Seiten ausblenden */
-body[data-screen="account-info"] .site-nav a[data-page="groups"],
-body[data-screen="settings"] .site-nav a[data-page="groups"],
-body[data-screen="admin"] .site-nav a[data-page="groups"] { display: none; }
 @media (max-width: 560px) {
   .site-nav { display: flex; gap: 9px; }
   .site-nav a { font-size: .78rem; }
