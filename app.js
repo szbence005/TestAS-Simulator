@@ -6,7 +6,6 @@ import * as Auth from './src/auth.js';
 import * as Groups from './src/groups.js';
 import { renderAdmin } from './src/admin.js';
 import { renderAccountInfo, renderAccountSettings } from './src/account.js';
-import { renderGroupsPage } from './src/groups-ui.js';
 
 const app = document.getElementById('app');
 const isSEB = /SEB/i.test(navigator.userAgent);
@@ -243,7 +242,7 @@ function renderHome() {
       <a href="#pruefung" class="platform-link" data-page="exam"><span class="platform-index">01</span><span><b>Prüfung</b><small>${EXAM.count} Aufgaben je Subtest · ${EXAM.minutes} Minuten</small></span><span class="platform-arrow">→</span></a>
       <a href="#ueben" class="platform-link" data-page="practice"><span class="platform-index">02</span><span><b>Üben</b><small>Aufgabentyp und Schwierigkeit auswählen</small></span><span class="platform-arrow">→</span></a>
       <a href="#verlauf" class="platform-link" data-page="history"><span class="platform-index">03</span><span><b>Verlauf</b><small>Ergebnisse und Fortschritt ansehen</small></span><span class="platform-arrow">→</span></a>
-      <a href="#gruppen" class="platform-link" data-page="groups"><span class="platform-index">04</span><span><b>Lerngruppen</b><small>Gruppe erstellen oder beitreten</small></span><span class="platform-arrow">→</span></a>
+      <a href="gruppen.html" class="platform-link" data-page="groups"><span class="platform-index">04</span><span><b>Lerngruppen</b><small>Gruppen, geplante Tests und Ergebnisse</small></span><span class="platform-arrow">→</span></a>
     </section>`;
   app.querySelectorAll('[data-page]').forEach((link) => (link.onclick = (event) => {
     event.preventDefault();
@@ -257,7 +256,7 @@ function renderExamPage() {
   app.innerHTML = `
     <p class="eyebrow"><b>PRÜFUNGSMODUS</b> / KERNSIMULATION</p>
     <h1>Prüfung</h1>
-    <p class="lead muted">${EXAM.count} Aufgaben je Subtest, ${EXAM.minutes} Minuten, keine Rückmeldung bis zur Abgabe.</p>
+    <p class="lead muted">${EXAM.count} Aufgaben je Subtest, Zeit einstellbar (Standard: ${EXAM.minutes} Minuten), keine Rückmeldung bis zur Abgabe.</p>
     <section class="card">
       <div class="grid">
         <div><label for="exam-type">Umfang</label><select id="exam-type">
@@ -266,13 +265,15 @@ function renderExamPage() {
           <option value="gleichungen">Nur Mathematische Gleichungen</option>
           <option value="quadrate">Nur Lateinische Quadrate</option>
         </select></div>
+        <div><label for="exam-minutes">Zeit pro Subtest (Minuten)</label><input id="exam-minutes" type="number" min="1" max="120" step="1" value="${EXAM.minutes}"></div>
         <div><label for="seed">Seed (optional, für dieselbe Aufgabenreihe)</label><input id="seed" type="number" min="0" placeholder="zufällig"></div>
       </div>
       <p style="margin-top:18px"><button class="primary lg" id="start-exam">Prüfung starten</button></p>
     </section>`;
   document.getElementById('start-exam').onclick = () => {
     const seedRaw = document.getElementById('seed').value;
-    startExam(document.getElementById('exam-type').value, seedRaw === '' ? null : Number(seedRaw));
+    const minutes = Math.min(120, Math.max(1, Math.round(Number(document.getElementById('exam-minutes').value)) || EXAM.minutes));
+    startExam(document.getElementById('exam-type').value, seedRaw === '' ? null : Number(seedRaw), minutes);
   };
 }
 
@@ -309,24 +310,21 @@ function openPlatformPage(page) {
   if (page === 'exam') renderExamPage();
   else if (page === 'practice') renderPracticePage();
   else if (page === 'history') renderHistoryPage();
-  else if (page === 'groups') renderGroupsPage({
-    app, setScreen, goHome: () => goHome(),
-    onOpenGroup: (groupId) => renderAdmin({ app, setScreen, goHome: () => goHome(), ownerMode: true, groupId }),
-  });
+  else if (page === 'groups') location.href = 'gruppen.html'; // Lerngruppen sind eine eigene Unterseite
   else renderHome();
 }
 
 /* ------------------------------------------------------------------ Prüfung */
-function startExam(kind, seed) {
+function startExam(kind, seed, minutes = EXAM.minutes, groupId = null) {
   const useSeed = Number.isFinite(seed) && seed !== null ? seed : Math.floor(Math.random() * 1e9);
   const types = kind === 'all' ? ['figural', 'gleichungen', 'quadrate'] : [kind];
   app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
   setTimeout(() => {
     S = {
-      seed: useSeed, si: 0,
+      seed: useSeed, si: 0, groupId,
       sections: types.map((type) => {
         const tasks = buildExamSet(type, useSeed);
-        return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, limitMs: EXAM.minutes * 60000 };
+        return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, minutes, limitMs: minutes * 60000 };
       }),
     };
     renderIntro();
@@ -347,7 +345,7 @@ function renderIntro() {
   const sec = S.sections[S.si];
   app.innerHTML = `<h1>${TYPES[sec.type].label}</h1><p class="muted">Subtest ${S.si + 1} von ${S.sections.length} ${badges()}</p>
     <section class="card">${INSTRUCTIONS[sec.type]}
-      <p>Sie haben <b>${EXAM.count} Aufgaben</b> und <b>${EXAM.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
+      <p>Sie haben <b>${EXAM.count} Aufgaben</b> und <b>${sec.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
       <p class="muted">Tastatur: ← → blättern, bei Quadraten A–E wählen, bei Figuralen Sequenzen 1–3 (Bild 1) und 4–6 (Bild 2), bei Gleichungen Enter = weiter.</p>
       <p><button class="primary" id="go">Subtest starten</button> <button id="abort">Abbrechen</button></p></section>`;
   document.getElementById('go').onclick = () => { sec.startedAt = Date.now(); startTimer(); renderExam(); };
@@ -360,7 +358,7 @@ function startTimer() {
     const sec = S.sections[S.si];
     const left = sec.limitMs - (Date.now() - sec.startedAt);
     const el = document.getElementById('timer');
-    if (el) { el.textContent = fmt(left); el.classList.toggle('low', left < 5 * 60000); }
+    if (el) { el.textContent = fmt(left); el.classList.toggle('low', left < Math.min(5 * 60000, sec.limitMs / 5)); }
     if (left <= 0) finishSection(true);
   }, 250);
 }
@@ -373,7 +371,7 @@ function renderExam() {
   app.innerHTML = `
     <div class="topbar">
       <div><b>${TYPES[sec.type].label}</b> · Aufgabe ${sec.i + 1}/${sec.tasks.length}</div>
-      <div class="timer ${left < 5 * 60000 ? 'low' : ''}" id="timer" role="timer">${fmt(left)}</div>
+      <div class="timer ${left < Math.min(5 * 60000, sec.limitMs / 5) ? 'low' : ''}" id="timer" role="timer">${fmt(left)}</div>
       <button class="danger" id="submit">Abgeben</button>
     </div>
     <div class="nav" id="nav">${sec.tasks.map((_, k) => `<button data-k="${k}" aria-label="Aufgabe ${k + 1}">${k + 1}</button>`).join('')}</div>
@@ -442,7 +440,7 @@ function renderResult() {
     }).join('');
     html += `<section class="card"><h2 style="margin-top:0">${TYPES[sec.type].label}</h2>
       <div class="score">${correct} / ${sec.tasks.length}</div>
-      <p class="muted">Zeit: ${fmt(seconds * 1000)} von ${EXAM.minutes}:00${sec.auto ? ' (Zeit abgelaufen)' : ''} · unbeantwortet: ${sec.answers.filter((a) => !answered(a)).length}</p>
+      <p class="muted">Zeit: ${fmt(seconds * 1000)} von ${sec.minutes}:00${sec.auto ? ' (Zeit abgelaufen)' : ''} · unbeantwortet: ${sec.answers.filter((a) => !answered(a)).length}</p>
       <table><thead><tr><th>Schwierigkeit</th><th>Richtig</th></tr></thead><tbody>${byLevel}</tbody></table>
       <h2>Auswertung der Aufgaben</h2>
       ${sec.tasks.map((t, k) => {
@@ -453,9 +451,11 @@ function renderResult() {
   }
   store.set(HISTORY_KEY, history.slice(0, 50));
   if (user) Auth.pushHistory(fresh);
-  html += '<p><button class="primary" id="home">Zur Startseite</button></p>';
+  const groupId = S.groupId;
+  html += `<p><button class="primary" id="home">Zur Startseite</button>${groupId ? ' <button id="to-group">Zur Lerngruppe</button>' : ''}</p>`;
   app.innerHTML = html;
   document.getElementById('home').onclick = () => { S = null; renderHome(); };
+  if (groupId) document.getElementById('to-group').onclick = () => { location.href = `gruppen.html#${encodeURIComponent(groupId)}`; };
 }
 
 /* ------------------------------------------------------------------ Übungsmodus */
@@ -557,7 +557,7 @@ function renderAuthSlot() {
         <nav class="profile-menu" id="profile-menu" aria-label="Profilmenü" hidden>
           <a href="#kontoinformationen" id="profile-info">Kontoinformationen</a>
           <a href="#einstellungen" id="profile-settings">Einstellungen</a>
-          <a href="#lerngruppen" id="profile-groups">Lerngruppen</a>
+          <a href="gruppen.html" id="profile-groups">Lerngruppen</a>
           ${isAdmin ? '<a href="#admin" id="profile-admin">Admin-Dashboard</a>' : ''}
         </nav>
       </div>`
@@ -722,6 +722,29 @@ document.querySelectorAll('.site-nav a').forEach((a) => a.addEventListener('clic
   openPlatformPage(a.dataset.page);
 }));
 
+/* ------------------------------------------------------------------ Einstieg von außen: Gruppentest-Link, Navigation der Unterseite */
+const HASH_PAGES = { '#pruefung': 'exam', '#ueben': 'practice', '#verlauf': 'history' };
+
+async function startGroupTest(gid, tid) {
+  const r = await Groups.groupTests(gid);
+  const t = r.ok ? r.data.tests.find((x) => x.id === tid) : null;
+  if (t?.released && t.seed != null) return startExam(t.kind, t.seed, t.minutes, gid);
+  setScreen('home');
+  const msg = t ? `Dieser Test startet erst am ${new Date(t.startsAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Dieser Test ist nicht (mehr) verfügbar.';
+  app.innerHTML = `<h1>Gruppentest</h1><section class="card"><p>${esc(msg)}</p><p><a class="btn" href="gruppen.html#${esc(encodeURIComponent(gid))}">Zurück zur Lerngruppe</a></p></section>`;
+}
+
+async function openFromLocation() {
+  if (!user) return;
+  const ref = new URLSearchParams(location.search).get('gruppentest');
+  if (ref) {
+    window.history.replaceState(null, '', location.pathname); // Seite neu laden startet den Test nicht noch einmal
+    const [gid, tid] = ref.split('~');
+    return startGroupTest(gid, tid);
+  }
+  if (HASH_PAGES[location.hash]) openPlatformPage(HASH_PAGES[location.hash]);
+}
+
 renderStartup();
 Auth.getSession().then(async (s) => {
   authAvailable = s.available;
@@ -732,4 +755,5 @@ Auth.getSession().then(async (s) => {
   renderAuthSlot();
   await syncHistory();
   renderHome();
+  await openFromLocation();
 });

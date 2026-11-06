@@ -89,6 +89,7 @@ export const auth = betterAuth({
     deleteUser: {
       enabled: true,
       afterDelete: async (deletedUser) => {
+        await sql.run('DELETE FROM group_tests WHERE group_id IN (SELECT id FROM study_groups WHERE created_by = ?)', [deletedUser.id]);
         await sql.run('DELETE FROM study_group_members WHERE group_id IN (SELECT id FROM study_groups WHERE created_by = ?)', [deletedUser.id]);
         await sql.run('DELETE FROM study_groups WHERE created_by = ?', [deletedUser.id]);
         await sql.run('DELETE FROM study_group_members WHERE user_id = ?', [deletedUser.id]);

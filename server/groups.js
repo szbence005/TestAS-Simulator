@@ -1,7 +1,7 @@
 // Lerngruppen: Teilnehmer treten mit einem Code bei, der Admin (ADMIN_EMAILS) sieht die Ergebnisse der Mitglieder.
 import { randomUUID } from 'node:crypto';
 import { sql } from './auth.js';
-import { TYPE_KEYS, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc } from './stats.js';
+import { TYPE_KEYS, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc, parseTestInput, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
 
 const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS);
 export const isAdmin = (user) => Boolean(user?.email) && adminEmails.has(user.email.toLowerCase());
@@ -17,6 +17,11 @@ export async function ensureGroupTables() {
   await sql.run(`CREATE TABLE IF NOT EXISTS study_group_members (
     group_id TEXT NOT NULL, user_id TEXT NOT NULL, joined_at ${sql.bigint} NOT NULL,
     PRIMARY KEY (group_id, user_id))`);
+  // Geplante Tests einer Gruppe: erscheinen für die Mitglieder ab starts_at (Seed + Umfang + Zeit ergeben die Aufgaben)
+  await sql.run(`CREATE TABLE IF NOT EXISTS group_tests (
+    id TEXT PRIMARY KEY, group_id TEXT NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL, minutes INTEGER NOT NULL,
+    seed INTEGER NOT NULL, starts_at ${sql.bigint} NOT NULL, created_at ${sql.bigint} NOT NULL)`);
+  await sql.run('CREATE INDEX IF NOT EXISTS group_tests_group ON group_tests (group_id)');
 }
 
 const num = (x) => (x == null ? x : Number(x)); // BIGINT/COUNT kommen aus Postgres als String
@@ -32,6 +37,8 @@ function tooManyMisses(uid) {
   return recent.length >= 8;
 }
 const noteMiss = (uid) => misses.set(uid, [...(misses.get(uid) ?? []), Date.now()]);
+
+const testRow = (r) => ({ id: r.id, title: r.title, kind: r.kind, minutes: num(r.minutes), seed: num(r.seed), startsAt: num(r.starts_at), createdAt: num(r.created_at) });
 
 const db = {
   groupByCode: async (code) => (await sql.all('SELECT id, name FROM study_groups WHERE code = ?', [code]))[0],
@@ -63,7 +70,25 @@ const db = {
       try { await sql.run('INSERT INTO study_groups (id, name, code, created_at, created_by) VALUES (?, ?, ?, ?, ?)', [id, name, generateCode(), Date.now(), ownerId]); return id; } catch (e) { if (i === 4) throw e; }
     }
   },
+  tests: async (gid) => (await sql.all(
+    'SELECT id, title, kind, minutes, seed, starts_at, created_at FROM group_tests WHERE group_id = ? ORDER BY starts_at DESC, created_at DESC', [gid])).map(testRow),
+  test: async (gid, tid) => (await sql.all(
+    'SELECT id, title, kind, minutes, seed, starts_at, created_at FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid])).map(testRow)[0],
+  testCount: async (gid) => Number((await sql.all('SELECT COUNT(*) AS n FROM group_tests WHERE group_id = ?', [gid]))[0].n),
+  createTest: async (gid, t) => {
+    const id = randomUUID();
+    await sql.run('INSERT INTO group_tests (id, group_id, title, kind, minutes, seed, starts_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, gid, t.title, t.kind, t.minutes, t.seed, t.startsAt, Date.now()]);
+    return id;
+  },
+  removeTest: (gid, tid) => sql.run('DELETE FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid]),
+  // Prüfungsergebnisse der aktuellen Gruppenmitglieder mit einem der Seeds (Grundlage für die Auswertung der Tests)
+  examEntries: async (gid, seeds) => (!seeds.length ? [] : (await sql.all(
+    `SELECT user_id, ts, mode, type, correct, total, seconds, seed FROM history
+     WHERE mode = 'exam' AND seed IN (${seeds.map(() => '?').join(', ')})
+       AND user_id IN (SELECT user_id FROM study_group_members WHERE group_id = ?) ORDER BY ts`, [...seeds, gid])).map((e) => ({ ...e, ts: num(e.ts) }))),
   remove: async (gid) => {
+    await sql.run('DELETE FROM group_tests WHERE group_id = ?', [gid]);
     await sql.run('DELETE FROM study_group_members WHERE group_id = ?', [gid]);
     return sql.run('DELETE FROM study_groups WHERE id = ?', [gid]);
   },
@@ -175,6 +200,52 @@ async function exportGroup(req, res, gid, group, sendCsv) {
 const slug = (s) => s.normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'gruppe';
 
 /**
+ * /api/groups/:id/tests[/:tid] – Gruppentests.
+ * Mitglieder: nur die Liste lesen (Seed erst ab Startzeit). Gruppenleitung: planen, auswerten, löschen.
+ */
+async function testsApi({ req, res, gid, group, owner, user, tid, method, send, readJson }) {
+  const now = Date.now();
+  if (!tid) {
+    if (method === 'GET') {
+      const tests = await db.tests(gid);
+      if (!owner) {
+        const mine = await db.entries(gid, user.id);
+        return send(res, 200, {
+          group: { id: group.id, name: group.name }, role: 'member',
+          tests: tests.map((t) => { const out = shapeTest(t, { now }); return out.released ? { ...out, result: testResult(t, mine) } : out; }),
+        });
+      }
+      const [entries, members] = await Promise.all([db.examEntries(gid, tests.map((t) => t.seed)), db.members(gid)]);
+      return send(res, 200, {
+        group, role: 'owner', members: members.length,
+        tests: tests.map((t) => ({ ...shapeTest(t, { owner: true, now }), completed: completedCount(t, entries) })),
+      });
+    }
+    if (method === 'POST') {
+      const parsed = parseTestInput(await readJson(req), now);
+      if (parsed.error) return send(res, 400, { error: parsed.error });
+      if ((await db.testCount(gid)) >= MAX_TESTS_PER_GROUP) return send(res, 400, { error: 'limit' });
+      const id = await db.createTest(gid, parsed.test);
+      return send(res, 200, { test: shapeTest({ ...parsed.test, id }, { owner: true, now }) });
+    }
+    return send(res, 405, { error: 'method' });
+  }
+  const test = await db.test(gid, tid);
+  if (!test) return send(res, 404, { error: 'not_found' });
+  if (method === 'GET') {
+    const [entries, members] = await Promise.all([db.examEntries(gid, [test.seed]), db.members(gid)]);
+    const byUser = new Map();
+    for (const e of entries) (byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)).push(e);
+    return send(res, 200, {
+      test: shapeTest(test, { owner: true, now }),
+      members: members.map((m) => ({ ...memberOut(m), result: testResult(test, byUser.get(m.id) ?? []) })),
+    });
+  }
+  if (method === 'DELETE') { await db.removeTest(gid, tid); return send(res, 200, { ok: true }); }
+  return send(res, 405, { error: 'method' });
+}
+
+/**
  * Behandelt /api/account, /api/groups/* und /api/admin/*. ctx: { user, send, sendCsv, readJson, sameOrigin }
  * Gibt true zurück, wenn die Anfrage behandelt wurde.
  */
@@ -194,9 +265,16 @@ export async function groupsApi(req, res, pathname, ctx) {
   if (area === 'groups') {
     if (a === 'created' && method === 'GET') return send(res, 200, { groups: await db.created(user.id) });
     if (a && !ACTIONS.has(a) && ID.test(a)) {
-      if (!(await db.isOwner(a, user.id))) return send(res, 403, { error: 'forbidden' });
+      const owner = await db.isOwner(a, user.id);
+      // Mitglieder dürfen nur die Testliste lesen (GET /api/groups/:id/tests); alles andere bleibt der Gruppenleitung vorbehalten
+      const memberRead = !owner && b === 'tests' && !c && method === 'GET' && await db.isMember(a, user.id);
+      if (!owner && !memberRead) return send(res, 403, { error: 'forbidden' });
       const group = await db.group(a);
       if (!group) return send(res, 404, { error: 'not_found' });
+      if (b === 'tests') {
+        if (c && !ID.test(c)) return send(res, 404, { error: 'not_found' });
+        return testsApi({ req, res, gid: a, group, owner, user, tid: c, method, send, readJson });
+      }
       if (!b) {
         if (method === 'GET') return send(res, 200, { group, members: await groupOverview(a) });
         if (method === 'DELETE') { await db.remove(a); return send(res, 200, { ok: true }); }

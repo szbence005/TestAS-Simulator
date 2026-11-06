@@ -4,7 +4,7 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
 
-export function renderGroupsPage({ app, setScreen, goHome, onOpenGroup }) {
+export function renderGroupsPage({ app, setScreen, goHome, onStatistics }) {
   setScreen('groups');
   app.innerHTML = `
     <div class="row" style="margin-top:14px"><button type="button" id="groups-home">‹ Startseite</button></div>
@@ -50,7 +50,7 @@ export function renderGroupsPage({ app, setScreen, goHome, onOpenGroup }) {
 
   const renderGroups = (groups) => {
     $('grp-list').innerHTML = groups.length
-      ? `<ul class="grp-list">${groups.map((group) => `<li><span>${esc(group.name)}</span><button type="button" class="small" data-leave="${esc(group.id)}">Verlassen</button></li>`).join('')}</ul>`
+      ? `<ul class="grp-list">${groups.map((group) => `<li><a href="#${esc(group.id)}">${esc(group.name)}</a><button type="button" class="small" data-leave="${esc(group.id)}">Verlassen</button></li>`).join('')}</ul>`
       : '<p class="muted">Du bist noch keiner Gruppe beigetreten.</p>';
     $('grp-list').querySelectorAll('[data-leave]').forEach((button) => (button.onclick = async () => {
       if (!confirm('Gruppe wirklich verlassen? Die Gruppenleitung sieht deine Ergebnisse danach nicht mehr.')) return;
@@ -62,9 +62,9 @@ export function renderGroupsPage({ app, setScreen, goHome, onOpenGroup }) {
 
   const renderOwnedGroups = (groups) => {
     $('grp-owned').innerHTML = groups.length
-      ? `<ul class="grp-list">${groups.map((group) => `<li><span>${esc(group.name)} <span class="muted small-text">${group.members} Mitglieder · ${esc(group.code)}</span></span><span class="row"><button type="button" class="small" data-copy="${esc(group.code)}">Code kopieren</button><button type="button" class="small" data-statistics="${esc(group.id)}">Statistik</button></span></li>`).join('')}</ul>`
+      ? `<ul class="grp-list">${groups.map((group) => `<li><span><a href="#${esc(group.id)}">${esc(group.name)}</a> <span class="muted small-text">${group.members} Mitglieder · ${esc(group.code)}</span></span><span class="row"><a class="btn small" href="#${esc(group.id)}">Tests</a><button type="button" class="small" data-copy="${esc(group.code)}">Code kopieren</button><button type="button" class="small" data-statistics="${esc(group.id)}">Statistik</button></span></li>`).join('')}</ul>`
       : '<p class="muted">Du hast noch keine Gruppe erstellt.</p>';
-    $('grp-owned').querySelectorAll('[data-statistics]').forEach((button) => (button.onclick = () => onOpenGroup?.(button.dataset.statistics)));
+    $('grp-owned').querySelectorAll('[data-statistics]').forEach((button) => (button.onclick = () => onStatistics?.(button.dataset.statistics)));
     $('grp-owned').querySelectorAll('[data-copy]').forEach((button) => (button.onclick = async () => {
       try { await navigator.clipboard.writeText(button.dataset.copy); button.textContent = 'Kopiert'; }
       catch { prompt('Beitrittscode:', button.dataset.copy); }
@@ -91,7 +91,7 @@ export function renderGroupsPage({ app, setScreen, goHome, onOpenGroup }) {
     $('grp-create-btn').disabled = false;
     if (!result.ok) { showError('grp-create-error', G.errorText(result)); return; }
     $('grp-new-name').value = '';
-    $('grp-created').innerHTML = `<p>Gruppe „${esc(result.data.group.name)}“ erstellt. Teile diesen Beitrittscode:</p>
+    $('grp-created').innerHTML = `<p>Gruppe „<a href="#${esc(result.data.group.id)}">${esc(result.data.group.name)}</a>“ erstellt. Teile diesen Beitrittscode:</p>
       <p><code>${esc(result.data.group.code)}</code> <button type="button" class="small" id="grp-created-copy">Kopieren</button></p>`;
     $('grp-created-copy').onclick = async () => {
       try { await navigator.clipboard.writeText(result.data.group.code); $('grp-created-copy').textContent = 'Kopiert'; }

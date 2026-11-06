@@ -37,7 +37,7 @@ await ensureGroupTables();
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 // Nur diese Dateien werden ausgeliefert – nicht server/, data/ oder .git
-const isPublic = (p) => ['/index.html', '/app.js', '/style.css'].includes(p) || /^\/src\/[\w-]+\.js$/.test(p);
+const isPublic = (p) => ['/index.html', '/app.js', '/style.css', '/gruppen.html', '/gruppen.js'].includes(p) || /^\/src\/[\w-]+\.js$/.test(p);
 
 const authHandler = toNodeHandler(auth);
 const MODES = new Set(['exam', 'practice']);
@@ -90,7 +90,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/config') return send(res, 200, { github: githubEnabled });
     if (pathname === '/api/history') return await historyApi(req, res);
     if (pathname === '/api/account' || pathname.startsWith('/api/groups/') || pathname.startsWith('/api/admin/')) return await groupsRoute(req, res, pathname);
-    const p = pathname === '/' ? '/index.html' : pathname;
+    const p = pathname === '/' ? '/index.html' : pathname === '/gruppen' ? '/gruppen.html' : pathname;
     if (!isPublic(p)) return res.writeHead(404).end('Not found');
     const data = await readFile(resolve(root, '.' + p));
     res.writeHead(200, { 'Content-Type': types[extname(p)], 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' }).end(data);

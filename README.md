@@ -67,15 +67,19 @@ Any signed-in user can create a group; participants join with a code, and the gr
 
 **Workflow:**
 
+The *Lerngruppen* area is its own sub-page (`gruppen.html`, also reachable as `/gruppen`): the overview is at `#`, a group's page at `#<group id>`.
+
 1. **Signed-in user** → Lerngruppen → New group → enter a name; the join code (`XXXX-XXXX`) is assigned automatically.
 2. **Participants:** sign in → Lerngruppen → enter the code → read the notice, consent → Join. Leaving is possible at any time (the group creator or an admin can also remove members).
 3. **Group creator** → Lerngruppen → Your groups → Statistics: a table with exams/practice sessions, average per subtest, last activity and trend. Clicking a name shows that member's history (chart + all results). Two CSV exports are available (overview, all individual results; semicolon-separated, decimal comma, UTF-8, opens directly in Excel). Admins can view and manage all groups.
+
+4. **Scheduled tests:** on a group's page the creator plans a test (title, scope = full core module or a single subtest, minutes per subtest, start time). The server picks a random seed. Until the start time, members only see title and time – the seed (= the tasks) is withheld by the API; afterwards a *Test starten* button opens the exam with exactly that seed and time limit. Per subtest the member's first exam attempt after the start time counts; the creator sees who has finished and each member's score and time. Deleting a test does not delete members' history entries.
 
 Admins also have a **System overview** with all registered users, usage totals, overall exam/practice performance, and per-user history. **Einstellungen** lets signed-in users change their display name or password; the current email address is read-only.
 
 **Privacy:** explicit consent is required when joining (the server enforces it). The group creator and admins can see a member's name, email and all stored results, including earlier ones. Only results saved while logged in exist on the server; anyone who has not joined is invisible to the group creator. For minors, obtain parental consent where required (GDPR Art. 8; the age threshold in Hungary is 16).
 
-**Technical notes:** two new tables, `study_groups` and `study_group_members`, are created at startup (Postgres and SQLite). The logic lives in `server/groups.js` (API) and `server/stats.js` (statistics, CSV, codes; tested in `test/groups.test.js`), and the UI in `src/admin.js`. Wrong codes are rate-limited (8 per 15 minutes per user). Trend = the last *k* results compared with the *k* before them (k ≤ 3, from 4 results onwards); a change of ±3 percentage points or more counts as rising/falling. Results currently store only the score per subtest, not a breakdown by difficulty.
+**Technical notes:** three new tables, `study_groups`, `study_group_members` and `group_tests`, are created at startup (Postgres and SQLite). The logic lives in `server/groups.js` (API) and `server/stats.js` (statistics, CSV, codes; tested in `test/groups.test.js`), and the UI in `src/admin.js`. Wrong codes are rate-limited (8 per 15 minutes per user). Trend = the last *k* results compared with the *k* before them (k ≤ 3, from 4 results onwards); a change of ±3 percentage points or more counts as rising/falling. Results currently store only the score per subtest, not a breakdown by difficulty.
 
 
 ## Safe Exam Browser (SEB)
@@ -93,6 +97,8 @@ A browser cannot prevent note-taking; you have to follow the "no notes" rule you
 
 ```
 index.html, style.css, app.js   UI (screens, timer, scoring)
+gruppen.html, gruppen.js        sub-page for study groups (overview, group page with scheduled tests)
+src/group-page.js               group page: plan/start/evaluate tests
 src/auth.js                     login + history sync client
 server/                         Better Auth server (optional), groups API (groups.js), statistics/CSV (stats.js)
 src/admin.js, src/groups.js     account dialog (joining a group) and admin view

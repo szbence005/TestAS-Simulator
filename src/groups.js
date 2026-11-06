@@ -17,6 +17,11 @@ export const ownedDeleteGroup = (gid) => safe(() => call(`/api/groups/${id(gid)}
 export const ownedMember = (gid, uid) => safe(() => call(`/api/groups/${id(gid)}/members/${id(uid)}`));
 export const ownedRemoveMember = (gid, uid) => safe(() => call(`/api/groups/${id(gid)}/members/${id(uid)}`, { method: 'DELETE' }));
 export const ownedExportUrl = (gid, kind) => `/api/groups/${id(gid)}/export?kind=${kind}`;
+// Gruppentests: Mitglieder lesen die Liste, die Gruppenleitung plant/wertet aus/löscht
+export const groupTests = (gid) => safe(() => call(`/api/groups/${id(gid)}/tests`));
+export const createTest = (gid, test) => safe(() => post(`/api/groups/${id(gid)}/tests`, test));
+export const testDetails = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`));
+export const deleteTest = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`, { method: 'DELETE' }));
 export const previewGroup = (code) => safe(() => post('/api/groups/preview', { code }));
 export const joinGroup = (code) => safe(() => post('/api/groups/join', { code, consent: true }));
 export const leaveGroup = (groupId) => safe(() => post('/api/groups/leave', { groupId }));
@@ -38,4 +43,7 @@ export const errorText = (r) => ({
   forbidden: 'Dafür fehlt die Berechtigung.',
   consent_required: 'Bitte der Weitergabe zustimmen.',
   invalid: 'Bitte einen Gruppennamen eingeben.',
+  invalid_test: 'Bitte Titel, Umfang, Zeit (1–120 Minuten) und Startzeit prüfen.',
+  invalid_time: 'Die Startzeit darf höchstens einen Tag zurück und zwei Jahre voraus liegen.',
+  limit: 'Diese Gruppe hat bereits die Höchstzahl an Tests (100).',
 }[r.data?.error] ?? (r.status === 0 ? 'Server nicht erreichbar.' : `Das hat nicht geklappt (Fehler ${r.status}).`));

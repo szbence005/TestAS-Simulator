@@ -10,7 +10,7 @@ const SHORT = { figural: 'Figural', gleichungen: 'Gleichungen', quadrate: 'Quadr
 const TYPES = Object.keys(TYPE);
 
 /* ------------------------------------------------------------------ Admin-Ansicht */
-export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId = null }) {
+export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId = null, homeLabel = 'Startseite' }) {
   setScreen('admin');
   const groupList = () => ownerMode ? G.ownedGroups() : G.adminGroups();
   const groupDetails = (id) => ownerMode ? G.ownedGroup(id) : G.adminGroup(id);
@@ -35,7 +35,7 @@ export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId
 
   /* --- Gruppenliste */
   async function showList() {
-    header(ownerMode ? 'Eigene Gruppen' : 'Gruppen', 'Startseite', goHome,
+    header(ownerMode ? 'Eigene Gruppen' : 'Gruppen', homeLabel, goHome,
       ownerMode ? '' : '<button type="button" class="small" id="adm-overview">Systemübersicht</button>');
     if (!ownerMode) document.getElementById('adm-overview').onclick = showOverview;
     const r = await groupList();
@@ -135,7 +135,7 @@ export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId
   }
 
   async function showOverview() {
-    header('Systemübersicht', 'Startseite', goHome, '<button type="button" class="small" id="adm-groups">Gruppenverwaltung</button>');
+    header('Systemübersicht', homeLabel, goHome, '<button type="button" class="small" id="adm-groups">Gruppenverwaltung</button>');
     document.getElementById('adm-groups').onclick = showList;
     const r = await G.adminOverview();
     if (!r.ok) return fail(r, goHome);

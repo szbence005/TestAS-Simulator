@@ -79,3 +79,51 @@ export function toCsv(header, rows) {
   return '\uFEFF' + [header, ...rows].map((r) => r.map(csvCell).join(';')).join('\r\n') + '\r\n';
 }
 export const utc = (ts) => new Date(ts).toISOString().slice(0, 16).replace('T', ' ');
+
+/* ---------- Gruppentests: vom Gruppenleiter geplante Prüfungen mit Startzeit */
+export const TEST_KINDS = ['all', ...TYPE_KEYS];
+export const MAX_TESTS_PER_GROUP = 100;
+const DAY_MS = 24 * 60 * 60_000;
+
+export const randomSeed = () => randomInt(1, 1_000_000_000); // passt in INTEGER (auch Postgres int4)
+
+/** Prüft die Eingaben der Gruppenleitung → { test } oder { error }. Startzeit: höchstens 24 h zurück (= sofort), höchstens 2 Jahre voraus. */
+export function parseTestInput(body, now = Date.now(), seed = randomSeed()) {
+  const title = String(body?.title ?? '').trim().slice(0, 80);
+  const kind = body?.kind;
+  const minutes = Number(body?.minutes);
+  const startsAt = Number(body?.startsAt);
+  if (!title || !TEST_KINDS.includes(kind) || !Number.isInteger(minutes) || minutes < 1 || minutes > 120 || !Number.isSafeInteger(startsAt)) return { error: 'invalid_test' };
+  if (startsAt < now - DAY_MS || startsAt > now + 730 * DAY_MS) return { error: 'invalid_time' };
+  return { test: { title, kind, minutes, startsAt, seed } };
+}
+
+/** Was ein Nutzer von einem Test sehen darf: Der Seed (= die Aufgaben) wird erst ab der Startzeit herausgegeben – nur die Gruppenleitung kennt ihn vorher. */
+export function shapeTest(test, { owner = false, now = Date.now() } = {}) {
+  const released = test.startsAt <= now;
+  const out = { id: test.id, title: test.title, kind: test.kind, minutes: test.minutes, startsAt: test.startsAt, released };
+  if (released || owner) out.seed = test.seed;
+  return out;
+}
+
+/** Ergebnis eines Teilnehmers: je Subtest zählt der erste Prüfungsversuch mit dem Seed des Tests ab der Startzeit. */
+export function testResult(test, entries) {
+  const types = test.kind === 'all' ? TYPE_KEYS : [test.kind];
+  const parts = {};
+  for (const e of [...entries].sort((a, b) => a.ts - b.ts)) {
+    if (e.mode !== 'exam' || Number(e.seed) !== test.seed || e.ts < test.startsAt || !types.includes(e.type) || parts[e.type]) continue;
+    parts[e.type] = { correct: e.correct, total: e.total, seconds: e.seconds ?? null, ts: e.ts };
+  }
+  const list = Object.values(parts);
+  const correct = list.reduce((sum, p) => sum + p.correct, 0);
+  const total = list.reduce((sum, p) => sum + p.total, 0);
+  const seconds = list.reduce((sum, p) => sum + (p.seconds ?? 0), 0);
+  return { parts, done: list.length, expected: types.length, complete: list.length === types.length, correct, total, seconds, percent: round1(pct(correct, total)) };
+}
+
+/** Wie viele Mitglieder den Test vollständig abgeschlossen haben (entries: Prüfungszeilen der Gruppenmitglieder). */
+export function completedCount(test, entries) {
+  const byUser = new Map();
+  for (const e of entries) (byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)).push(e);
+  return [...byUser.values()].filter((list) => testResult(test, list).complete).length;
+}

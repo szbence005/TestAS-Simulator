@@ -79,7 +79,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .spread { justify-content: space-between; }
 label { display: block; font-weight: 600; font-size: .9rem; margin: 14px 0 6px; color: var(--muted); }
-select, input[type=number], input[type=text], input[type=email], input[type=password], input[type=search] { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); color: var(--text); }
+select, input[type=number], input[type=datetime-local], input[type=text], input[type=email], input[type=password], input[type=search] { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); color: var(--text); }
 select { appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239b9ba4' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
 .badge { display: inline-block; font-family: var(--mono); font-size: .72rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); letter-spacing: .02em; }
 .badge.seb { color: var(--ok); border-color: var(--ok); }
@@ -346,3 +346,13 @@ label.check input { margin-top: 4px; }
   .profile-name { display: none; }
   .account-danger .row.nowrap { flex-wrap: wrap; }
 }
+
+/* Lerngruppen-Unterseite: Gruppentests */
+.test-card { margin: 12px 0; }
+.test-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+.test-head h3 { margin: 0; }
+.test-meta { margin: 6px 0 0; }
+.test-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.test-results { margin-top: 12px; overflow-x: auto; }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.grp-list a { font-weight: 600; }
