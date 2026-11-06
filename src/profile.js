@@ -23,7 +23,6 @@ export function renderProfileControl(slot, user, { isAdmin = false } = {}) {
     <nav class="profile-menu" id="profile-menu" aria-label="Profilmenü" hidden>
       <a href="./#kontoinformationen">Kontoinformationen</a>
       <a href="./#einstellungen">Einstellungen</a>
-      <a href="gruppen.html" aria-current="page">Lerngruppen</a>
       ${isAdmin ? '<a href="./#admin">Admin-Dashboard</a>' : ''}
     </nav>
   </div>`;

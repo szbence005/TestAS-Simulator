@@ -83,9 +83,9 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
   const drawShell = (data) => {
     const owner = data.role === 'owner';
     $('gp-body').innerHTML = `
-      <div class="title-row"><h1>${esc(data.group.name)}</h1>${owner ? `<button type="button" class="icon-btn" id="gp-stats" aria-label="Statistik ansehen" title="Statistik">${ICON.chart}</button>` : ''}</div>
+      <h1>${esc(data.group.name)}</h1>
       ${owner
-        ? `<p class="lead muted group-meta">${data.members} ${data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode ${codeButton(data.group.code)}</p>
+        ? `<p class="lead muted group-meta">${data.members} ${data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode ${codeButton(data.group.code)}<button type="button" class="icon-btn" id="gp-stats" aria-label="Statistik ansehen" title="Statistik">${ICON.chart}</button></p>
            <section class="card">
              <h2>Test planen</h2>
              <p class="muted">Der Test erscheint für alle Mitglieder zur gewählten Startzeit hier unter der Gruppe. Davor sehen sie nur Titel und Zeitpunkt, nicht die Aufgaben.</p>
