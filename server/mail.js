@@ -75,6 +75,21 @@ export const resetPasswordMail = (user, url) => ({
   }),
 });
 
+export const welcomeMail = (user, url) => ({
+  subject: 'Willkommen beim TestAS Simulator',
+  ...mailTemplate({
+    heading: 'Willkommen beim TestAS Simulator!',
+    paragraphs: [
+      greeting(user),
+      'vielen Dank für deine Registrierung! Dein Konto ist startklar.',
+      'Du kannst jetzt Prüfungen simulieren, einzelne Aufgabentypen üben, deinen Verlauf verfolgen und mit Lerngruppen gemeinsam trainieren. Deine Ergebnisse werden in deinem Konto gespeichert.',
+      'Wir wünschen dir viel Erfolg und gutes Üben!',
+    ],
+    button: { label: 'Jetzt loslegen', url },
+    note: 'Du erhältst diese E-Mail einmalig nach deiner Registrierung.',
+  }),
+});
+
 export const newTestMail = (user, { groupName, title, kindLabel, minutes, startsAt, url }) => ({
   subject: `Neuer Test in „${groupName}“: ${title}`,
   ...mailTemplate({

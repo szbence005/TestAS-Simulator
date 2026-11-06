@@ -3,7 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { betterAuth } from 'better-auth';
-import { mailEnabled, sendMail, verifyEmailMail, resetPasswordMail } from './mail.js';
+import { mailEnabled, sendMail, verifyEmailMail, resetPasswordMail, welcomeMail } from './mail.js';
 
 const port = Number(process.env.PORT) || 8080;
 const COLS = 'ts, mode, type, correct, total, seconds, seed';
@@ -99,7 +99,15 @@ export const auth = betterAuth({
       sendOnSignUp: true,
       sendOnSignIn: true, // bestehende Konten ohne Bestätigung bekommen beim Anmelden einen neuen Link
       autoSignInAfterVerification: true,
+      // Willkommens-Mail, sobald die Adresse bestätigt ist (E-Mail-Registrierung)
+      afterEmailVerification: async (user) => { void sendMail({ to: user, ...welcomeMail(user, baseURL) }); },
       sendVerificationEmail: async ({ user, url }) => { void sendMail({ to: user, ...verifyEmailMail(user, url) }); },
+    },
+  } : {}),
+  // GitHub-Konten sind bei der Registrierung schon bestätigt: Willkommens-Mail direkt beim Anlegen
+  ...(mailEnabled ? {
+    databaseHooks: {
+      user: { create: { after: async (user) => { if (user.emailVerified) void sendMail({ to: user, ...welcomeMail(user, baseURL) }); } } },
     },
   } : {}),
   user: {

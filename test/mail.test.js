@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mailTemplate, newTestMail, resetPasswordMail, sendMail, mailEnabled } from '../server/mail.js';
+import { mailTemplate, newTestMail, resetPasswordMail, welcomeMail, sendMail, mailEnabled } from '../server/mail.js';
 
 test('Mail-Vorlage: Text wird maskiert, Button und Klartext-Variante vorhanden', () => {
   const { html, text } = mailTemplate({ heading: 'A <b>', paragraphs: ['x & "y"'], button: { label: 'Los', url: 'https://x.de/a?b=1&c=2' } });
@@ -20,4 +20,11 @@ test('Mails: Betreff und Link', () => {
 test('Ohne Brevo-Schlüssel wird nichts gesendet', async () => {
   assert.equal(mailEnabled, false);
   assert.equal(await sendMail({ to: { email: 'a@x.de' }, subject: 's', html: 'h', text: 't' }), false);
+});
+
+test('Willkommens-Mail: Dank, Gruß und Link', () => {
+  const m = welcomeMail({ name: 'Anna', email: 'a@x.de' }, 'https://x.de');
+  assert.equal(m.subject, 'Willkommen beim TestAS Simulator');
+  assert.ok(m.text.includes('Hallo Anna') && m.text.includes('vielen Dank') && m.text.includes('gutes Üben'));
+  assert.ok(m.text.includes('Jetzt loslegen: https://x.de') && m.html.includes('href="https://x.de"'));
 });
