@@ -2,7 +2,7 @@
 // Mitglieder sehen die geplanten Tests und starten sie ab der Startzeit; die Gruppenleitung plant Tests und wertet sie aus.
 import * as G from './groups.js';
 import { TYPES, EXAM } from './tasks.js';
-import { esc, codeButton, bindCodeButtons } from './ui.js';
+import { esc, ICON, codeButton, bindCodeButtons } from './ui.js';
 
 const kindLabel = (kind) => (kind === 'all' ? 'Kernmodul (alle drei Subtests)' : TYPES[kind]?.label ?? kind);
 const fmtDate = (ms) => new Date(ms).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -83,10 +83,9 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
   const drawShell = (data) => {
     const owner = data.role === 'owner';
     $('gp-body').innerHTML = `
-      <h1>${esc(data.group.name)}</h1>
+      <div class="title-row"><h1>${esc(data.group.name)}</h1>${owner ? `<button type="button" class="icon-btn" id="gp-stats" aria-label="Statistik ansehen" title="Statistik">${ICON.chart}</button>` : ''}</div>
       ${owner
         ? `<p class="lead muted group-meta">${data.members} ${data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode ${codeButton(data.group.code)}</p>
-           <div class="row"><button type="button" class="small" id="gp-stats">Statistik</button></div>
            <section class="card">
              <h2>Test planen</h2>
              <p class="muted">Der Test erscheint für alle Mitglieder zur gewählten Startzeit hier unter der Gruppe. Davor sehen sie nur Titel und Zeitpunkt, nicht die Aufgaben.</p>
