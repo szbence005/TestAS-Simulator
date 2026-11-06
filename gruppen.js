@@ -2,11 +2,12 @@
 import * as Auth from './src/auth.js';
 import { renderGroupsPage } from './src/groups-ui.js';
 import { renderGroupPage } from './src/group-page.js';
+import * as G from './src/groups.js';
 import { renderAdmin } from './src/admin.js';
+import { renderProfileControl } from './src/profile.js';
 
 const app = document.getElementById('app');
 const ID = /^[\w-]{1,64}$/;
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let user = null;
 let screen = '';
 let cleanup = null;
@@ -35,14 +36,11 @@ function route() {
   if (!user) return;
   const groupId = decodeURIComponent(location.hash.slice(1));
   if (groupId && ID.test(groupId)) {
-    const stats = (gid) => renderAdmin({ app, setScreen, goHome: () => go(gid), ownerMode: true, groupId: gid, homeLabel: 'Gruppe' });
+    const stats = (gid) => renderAdmin({ app, setScreen, goHome: () => go(gid), ownerMode: true, groupId: gid, homeLabel: 'Gruppe', afterDelete: () => { G.forget('account'); go(); } });
     cleanup = renderGroupPage({ app, setScreen, groupId, goBack: () => go(), onStatistics: stats });
     return;
   }
-  renderGroupsPage({
-    app, setScreen, goHome: () => { location.href = './'; },
-    onStatistics: (gid) => renderAdmin({ app, setScreen, goHome: () => go(), ownerMode: true, groupId: gid, homeLabel: 'Lerngruppen' }),
-  });
+  renderGroupsPage({ app, setScreen, goHome: () => { location.href = './'; } });
 }
 
 window.addEventListener('hashchange', route);
@@ -50,7 +48,10 @@ window.addEventListener('hashchange', route);
 const session = await Auth.getSession();
 user = session.user;
 const slot = document.getElementById('auth-slot');
-if (user) slot.innerHTML = `<a class="auth-link" href="./">${esc(user.name || user.email)}</a>`;
+if (user) {
+  const account = await G.getAccount();
+  renderProfileControl(slot, user, { isAdmin: Boolean(account?.admin) });
+}
 if (!session.available) renderMessage('<p>Der Konto-Server ist nicht erreichbar. Lerngruppen brauchen eine Anmeldung.</p><p><a href="./">Zur Startseite</a></p>');
 else if (!user) renderMessage('<p>Bitte melde dich an, um Lerngruppen zu nutzen.</p><p><a class="btn" href="./">Zur Startseite zum Anmelden</a></p>');
 else route();

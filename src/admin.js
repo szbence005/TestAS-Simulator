@@ -1,5 +1,6 @@
 // Admin-Ansicht für Gruppen, Mitglieder, Verlauf und Systemstatistiken.
 import * as G from './groups.js';
+import { ICON, codeButton, bindCodeButtons, menuButton, bindMenuButton } from './ui.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dt = (ts) => new Date(ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
@@ -10,7 +11,7 @@ const SHORT = { figural: 'Figural', gleichungen: 'Gleichungen', quadrate: 'Quadr
 const TYPES = Object.keys(TYPE);
 
 /* ------------------------------------------------------------------ Admin-Ansicht */
-export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId = null, homeLabel = 'Startseite' }) {
+export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId = null, homeLabel = 'Startseite', afterDelete = null }) {
   setScreen('admin');
   const groupList = () => ownerMode ? G.ownedGroups() : G.adminGroups();
   const groupDetails = (id) => ownerMode ? G.ownedGroup(id) : G.adminGroup(id);
@@ -78,17 +79,20 @@ export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId
   };
 
   async function showGroup(gid) {
-    header('Gruppe', ownerMode ? 'Eigene Gruppen' : 'Alle Gruppen', showList);
+    const backToList = ownerMode ? goHome : showList;
+    header('Statistik', ownerMode ? homeLabel : 'Alle Gruppen', backToList);
     const r = await groupDetails(gid);
-    if (!r.ok) return fail(r, showList);
+    if (!r.ok) return fail(r, backToList);
     const { group, members } = r.data;
     document.querySelector('#app h1').textContent = group.name;
     body().innerHTML = `
       <div class="row" style="margin-bottom:10px">
-        <span>Beitrittscode: <code class="code">${esc(group.code)}</code></span><button class="small" id="copy">Kopieren</button>
+        <span>Beitrittscode: ${codeButton(group.code)}</span>
         <span class="grow"></span>
-        <a class="btn small" href="${groupExportUrl(gid, 'summary')}" download>Übersicht (CSV)</a>
-        <a class="btn small" href="${groupExportUrl(gid, 'raw')}" download>Alle Ergebnisse (CSV)</a>
+        ${menuButton('dl', ICON.download, 'Statistik herunterladen', [
+          { label: 'Übersicht (CSV)', href: groupExportUrl(gid, 'summary'), download: true },
+          { label: 'Alle Ergebnisse (CSV)', href: groupExportUrl(gid, 'raw'), download: true },
+        ])}
         <button class="small danger" id="del">Gruppe löschen</button>
       </div>
       ${members.length ? `<div class="card table-wrap"><table><thead><tr><th>Name</th><th>Prüf.</th><th>Üb.</th>
@@ -99,12 +103,13 @@ export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId
         </tbody></table></div>
         <p class="muted">Prüf. = Anzahl Prüfungen (ein komplettes Kernmodul zählt einmal), Üb. = Übungssitzungen. Ø = Durchschnitt der Prüfungsergebnisse je Subtest, in Klammern der Durchschnitt der Übungen.
         Trend: letzte Ergebnisse gegenüber den davor (ab 4 Ergebnissen; ±3 Prozentpunkte gelten als Veränderung). Es erscheinen nur Teilnehmer, die angemeldet waren und der Gruppe beigetreten sind.</p>`
-        : '<p class="lead muted">Noch keine Mitglieder. Teilen Sie den Code – Teilnehmer geben ihn im Konto-Menü ein.</p>'}`;
-    copy(document.getElementById('copy'), group.code);
+        : '<p class="lead muted">Noch keine Mitglieder. Teilen Sie den Code – Teilnehmer geben ihn unter „Lerngruppen“ ein.</p>'}`;
+    bindCodeButtons(body());
+    bindMenuButton('dl');
     document.getElementById('del').onclick = async () => {
       if (!confirm(`Gruppe „${group.name}“ löschen? Alle Mitglieder verlieren die Zuordnung (ihre Ergebnisse bleiben in ihren Konten).`)) return;
       const d = await deleteGroup(gid);
-      if (d.ok) showList(); else fail(d, showList);
+      if (d.ok) { if (ownerMode && afterDelete) afterDelete(); else showList(); } else fail(d, backToList);
     };
     body().querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => showMember(gid, group.name, b.dataset.m)));
   }
@@ -221,5 +226,5 @@ export function renderAdmin({ app, setScreen, goHome, ownerMode = false, groupId
     };
   }
 
-  if (groupId) showGroup(groupId); else if (ownerMode) showList(); else showOverview();
+  if (groupId) showGroup(groupId); else showOverview();
 }

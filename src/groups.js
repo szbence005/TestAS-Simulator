@@ -6,8 +6,15 @@ const safe = async (fn) => {
 };
 const id = encodeURIComponent;
 
+// Einfacher Zwischenspeicher: beim Wechsel zwischen den Seiten sofort anzeigen, im Hintergrund aktualisieren
+const cache = new Map();
+export const cached = (key) => cache.get(key);
+export const remember = (key, value) => cache.set(key, value);
+export const forget = (key) => cache.delete(key);
+
 export const getAccount = async () => {
   const r = await safe(() => call('/api/account'));
+  if (r.ok) cache.set('account', r.data);
   return r.ok ? r.data : null;
 };
 export const createGroup = (name) => safe(() => post('/api/groups/create', { name }));
@@ -18,7 +25,11 @@ export const ownedMember = (gid, uid) => safe(() => call(`/api/groups/${id(gid)}
 export const ownedRemoveMember = (gid, uid) => safe(() => call(`/api/groups/${id(gid)}/members/${id(uid)}`, { method: 'DELETE' }));
 export const ownedExportUrl = (gid, kind) => `/api/groups/${id(gid)}/export?kind=${kind}`;
 // Gruppentests: Mitglieder lesen die Liste, die Gruppenleitung plant/wertet aus/löscht
-export const groupTests = (gid) => safe(() => call(`/api/groups/${id(gid)}/tests`));
+export const groupTests = async (gid) => {
+  const r = await safe(() => call(`/api/groups/${id(gid)}/tests`));
+  if (r.ok) cache.set(`tests:${gid}`, r.data);
+  return r;
+};
 export const createTest = (gid, test) => safe(() => post(`/api/groups/${id(gid)}/tests`, test));
 export const testDetails = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`));
 export const deleteTest = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`, { method: 'DELETE' }));
@@ -41,6 +52,7 @@ export const errorText = (r) => ({
   rate_limit: 'Zu viele falsche Codes. Bitte in ein paar Minuten erneut versuchen.',
   unauthorized: 'Bitte erneut anmelden.',
   forbidden: 'Dafür fehlt die Berechtigung.',
+  own_group: 'Das ist deine eigene Gruppe – du leitest sie bereits.',
   consent_required: 'Bitte der Weitergabe zustimmen.',
   invalid: 'Bitte einen Gruppennamen eingeben.',
   invalid_test: 'Bitte Titel, Umfang, Zeit (1–120 Minuten) und Startzeit prüfen.',

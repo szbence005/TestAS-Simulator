@@ -41,14 +41,14 @@ const noteMiss = (uid) => misses.set(uid, [...(misses.get(uid) ?? []), Date.now(
 const testRow = (r) => ({ id: r.id, title: r.title, kind: r.kind, minutes: num(r.minutes), seed: num(r.seed), startsAt: num(r.starts_at), createdAt: num(r.created_at) });
 
 const db = {
-  groupByCode: async (code) => (await sql.all('SELECT id, name FROM study_groups WHERE code = ?', [code]))[0],
+  groupByCode: async (code) => (await sql.all('SELECT id, name, created_by FROM study_groups WHERE code = ?', [code]))[0],
   group: async (id) => {
     const g = (await sql.all('SELECT id, name, code, created_at FROM study_groups WHERE id = ?', [id]))[0];
     return g && { id: g.id, name: g.name, code: formatCode(g.code), createdAt: num(g.created_at) };
   },
   mine: async (uid) => (await sql.all(
     `SELECT g.id, g.name, m.joined_at FROM study_group_members m JOIN study_groups g ON g.id = m.group_id
-     WHERE m.user_id = ? ORDER BY m.joined_at`, [uid])).map((r) => ({ id: r.id, name: r.name, joinedAt: num(r.joined_at) })),
+     WHERE m.user_id = ? AND (g.created_by IS NULL OR g.created_by <> ?) ORDER BY m.joined_at`, [uid, uid])).map((r) => ({ id: r.id, name: r.name, joinedAt: num(r.joined_at) })),
   join: (gid, uid) => sql.run('INSERT INTO study_group_members (group_id, user_id, joined_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [gid, uid, Date.now()]),
   leave: (gid, uid) => sql.run('DELETE FROM study_group_members WHERE group_id = ? AND user_id = ?', [gid, uid]),
   all: async () => (await sql.all(
@@ -312,6 +312,7 @@ export async function groupsApi(req, res, pathname, ctx) {
       const body = await readJson(req);
       const group = await db.groupByCode(normalizeCode(body.code));
       if (!group) { noteMiss(user.id); return send(res, 404, { error: 'not_found' }); }
+      if (group.created_by === user.id) return send(res, 400, { error: 'own_group' }); // eigene Gruppe: kein Beitritt als Mitglied
       if (a === 'preview') return send(res, 200, { group: { name: group.name } });
       if (body.consent !== true) return send(res, 400, { error: 'consent_required' }); // Einwilligung muss ausdrücklich kommen
       await db.join(group.id, user.id);

@@ -2,10 +2,7 @@
 // Mitglieder sehen die geplanten Tests und starten sie ab der Startzeit; die Gruppenleitung plant Tests und wertet sie aus.
 import * as G from './groups.js';
 import { TYPES, EXAM } from './tasks.js';
-
-const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[char]));
+import { esc, codeButton, bindCodeButtons } from './ui.js';
 
 const kindLabel = (kind) => (kind === 'all' ? 'Kernmodul (alle drei Subtests)' : TYPES[kind]?.label ?? kind);
 const fmtDate = (ms) => new Date(ms).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -88,8 +85,8 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
     $('gp-body').innerHTML = `
       <h1>${esc(data.group.name)}</h1>
       ${owner
-        ? `<p class="lead muted">Du leitest diese Gruppe · ${data.members} ${data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode <code>${esc(data.group.code)}</code></p>
-           <div class="row"><button type="button" class="small" id="gp-copy">Code kopieren</button><button type="button" class="small" id="gp-stats">Statistik</button></div>
+        ? `<p class="lead muted group-meta">${data.members} ${data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode ${codeButton(data.group.code)}</p>
+           <div class="row"><button type="button" class="small" id="gp-stats">Statistik</button></div>
            <section class="card">
              <h2>Test planen</h2>
              <p class="muted">Der Test erscheint für alle Mitglieder zur gewählten Startzeit hier unter der Gruppe. Davor sehen sie nur Titel und Zeitpunkt, nicht die Aufgaben.</p>
@@ -113,10 +110,7 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
 
     if (owner) {
       $('gp-stats').onclick = () => onStatistics?.(groupId);
-      $('gp-copy').onclick = async () => {
-        try { await navigator.clipboard.writeText(data.group.code); $('gp-copy').textContent = 'Kopiert'; }
-        catch { prompt('Beitrittscode:', data.group.code); }
-      };
+      bindCodeButtons($('gp-body'));
       $('gt-create').onclick = async () => {
         const startsAt = new Date($('gt-start').value).getTime();
         $('gt-error').textContent = '';
@@ -150,8 +144,14 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
       return;
     }
     if (shellFor !== result.data.role) drawShell(result.data);
+    else if (result.data.role === 'owner') { // Mitgliederzahl aktuell halten
+      const meta = document.querySelector('.group-meta');
+      if (meta) meta.firstChild.textContent = `${result.data.members} ${result.data.members === 1 ? 'Mitglied' : 'Mitglieder'} · Beitrittscode `;
+    }
     drawTests(result.data);
   }
+  const known = G.cached(`tests:${groupId}`);
+  if (known) { drawShell(known); drawTests(known); } // sofort anzeigen, im Hintergrund aktualisieren
   load();
   return stop;
 }

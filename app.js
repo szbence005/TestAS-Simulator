@@ -743,6 +743,9 @@ async function openFromLocation() {
     return startGroupTest(gid, tid);
   }
   if (HASH_PAGES[location.hash]) openPlatformPage(HASH_PAGES[location.hash]);
+  // Links aus dem Profilmenü der Unterseite „Lerngruppen“
+  const accountLink = { '#kontoinformationen': 'profile-info', '#einstellungen': 'profile-settings', '#admin': 'profile-admin' }[location.hash];
+  if (accountLink) document.getElementById(accountLink)?.click();
 }
 
 renderStartup();

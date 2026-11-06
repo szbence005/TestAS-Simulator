@@ -356,3 +356,20 @@ label.check input { margin-top: 4px; }
 .test-results { margin-top: 12px; overflow-x: auto; }
 .badge.ok { color: var(--ok); border-color: var(--ok); }
 .grp-list a { font-weight: 600; }
+
+/* Lerngruppen: Symbol-Buttons, Code zum Kopieren, Dropdown-Menü */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; color: var(--text); text-decoration: none; flex: 0 0 auto; }
+.icon-btn:hover { border-color: var(--accent); background: var(--surface-2); }
+.grp-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.group-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.code-copy { display: inline-flex; align-items: center; gap: 8px; padding: 2px 10px; border: 1px dashed var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--accent); font-family: var(--mono); font-size: 1rem; letter-spacing: .06em; }
+.code-copy b { font-weight: 800; }
+.code-copy:hover { border-color: var(--accent); background: var(--surface-2); }
+.code-copy-hint { color: var(--ok); font: 600 .78rem system-ui, sans-serif; letter-spacing: 0; }
+.code-copy-hint:empty { display: none; }
+.menu-wrap { position: relative; display: inline-block; }
+.pop-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; min-width: 210px; padding: 6px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 30px rgba(0, 0, 0, .28); }
+.pop-menu[hidden] { display: none; }
+.pop-menu a { display: block; padding: 9px 10px; border-radius: 4px; color: var(--text); font-size: .9rem; text-decoration: none; white-space: nowrap; }
+.pop-menu a:hover { background: var(--surface-2); }
+@media (max-width: 560px) { .grp-list li { flex-direction: row; align-items: center; } }
