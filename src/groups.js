@@ -37,6 +37,10 @@ export const groupTests = async (gid) => {
 };
 export const createTest = (gid, test) => safe(() => post(`/api/groups/${id(gid)}/tests`, test));
 export const testDetails = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`));
+export const updateTest = (gid, tid, changes) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
+}));
+export const testExportUrl = (gid, tid) => `/api/groups/${id(gid)}/tests/${id(tid)}/export`;
 export const deleteTest = (gid, tid) => safe(() => call(`/api/groups/${id(gid)}/tests/${id(tid)}`, { method: 'DELETE' }));
 export const previewGroup = (code) => safe(() => post('/api/groups/preview', { code }));
 export const joinGroup = (code) => safe(() => post('/api/groups/join', { code, consent: true }));
@@ -61,6 +65,8 @@ export const errorText = (r) => ({
   consent_required: 'Bitte der Weitergabe zustimmen.',
   invalid: 'Bitte einen Gruppennamen eingeben.',
   invalid_test: 'Bitte Titel, Umfang, Aufgabenzahl (1–40), Schwierigkeit, Zeit (1–120 Minuten) und Startzeit prüfen.',
+  invalid_end: 'Die Endzeit muss nach der Startzeit liegen (beim Planen auch in der Zukunft).',
+  has_results: 'Es gibt schon Ergebnisse. Aufgabenzahl, Schwierigkeit und Startzeit lassen sich nicht mehr ändern.',
   invalid_time: 'Die Startzeit darf höchstens einen Tag zurück und zwei Jahre voraus liegen.',
   limit: 'Diese Gruppe hat bereits die Höchstzahl an Tests (100).',
 }[r.data?.error] ?? (r.status === 0 ? 'Server nicht erreichbar.' : `Das hat nicht geklappt (Fehler ${r.status}).`));

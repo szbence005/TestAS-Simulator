@@ -37,14 +37,12 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
         <form id="profile-form">
           <label for="profile-name">Anzeigename</label>
           <input id="profile-name" name="name" type="text" autocomplete="name" maxlength="120" required value="${esc(user.name)}">
-          <label for="profile-email">E-Mail-Adresse</label>
-          <input id="profile-email" type="email" value="${esc(user.email)}" readonly aria-describedby="email-note">
-          <p id="email-note" class="form-note">Die E-Mail-Adresse ist dein Anmeldename und kann hier nicht geändert werden.</p>
           <p id="profile-status" class="form-note" role="status" aria-live="polite"></p>
           <p class="form-error" id="profile-error" role="alert"></p>
           <div class="card-actions"><button type="submit" class="primary" id="profile-save">Änderungen speichern</button></div>
         </form>
       </section>
+      <div id="email-slot"></div>
       <section class="card settings-card">
         <h2>Darstellung</h2>
         <p class="settings-desc">Wähle ein helles oder dunkles Design. „Automatisch“ folgt der Einstellung deines Geräts.</p>
@@ -103,8 +101,42 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
   $('settings-logout').onclick = onLogout;
   $('theme-options').addEventListener('change', (event) => { if (event.target.name === 'theme') setTheme(event.target.value); });
 
+  // E-Mail-Adresse: änderbar, wenn der Server E-Mails senden kann (Bestätigungslink an die neue Adresse), sonst nur lesbar
+  const drawEmail = (canChange) => {
+    $('email-slot').innerHTML = `<section class="card settings-card">
+      <h2>E-Mail-Adresse</h2>
+      <p class="settings-desc">${canChange ? 'Deine E-Mail-Adresse ist dein Anmeldename. Für eine neue Adresse schicken wir einen Bestätigungslink an diese; bis zum Klick gilt weiter die bisherige.' : 'Die E-Mail-Adresse ist dein Anmeldename und kann hier nicht geändert werden.'}</p>
+      <form id="email-form">
+        <label for="current-email">Aktuelle Adresse</label>
+        <input id="current-email" type="email" value="${esc(user.email)}" readonly>
+        ${canChange ? `<label for="new-email">Neue E-Mail-Adresse</label>
+        <input id="new-email" type="email" autocomplete="email" maxlength="254" required>
+        <p id="email-status" class="form-note" role="status" aria-live="polite"></p>
+        <p class="form-error" id="email-error" role="alert"></p>
+        <div class="card-actions"><button type="submit" class="primary" id="email-save">Bestätigungslink senden</button></div>` : ''}
+      </form>
+    </section>`;
+    if (!canChange) return;
+    $('email-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const email = $('new-email').value.trim();
+      $('email-error').textContent = '';
+      $('email-status').textContent = '';
+      if (email.toLowerCase() === user.email.toLowerCase()) { $('email-error').textContent = 'Das ist bereits deine aktuelle Adresse.'; return; }
+      $('email-save').disabled = true;
+      const result = await Auth.changeEmail(email);
+      $('email-save').disabled = false;
+      if (!result.ok) { $('email-error').textContent = result.error; return; }
+      $('new-email').value = '';
+      // Bewusst neutral: Die Antwort verrät nicht, ob die Adresse schon vergeben ist
+      $('email-status').textContent = `Wenn die Adresse ${email} verwendet werden kann, haben wir ihr einen Bestätigungslink geschickt. Die Adresse ändert sich erst nach dem Klick darauf.`;
+    });
+  };
+  drawEmail(Boolean(G.cached('account')?.mail?.available));
+
   // E-Mail-Benachrichtigungen (nur wenn der Server E-Mails senden kann)
   G.getAccount().then((account) => {
+    if (account?.mail?.available && $('email-slot') && !$('new-email')) drawEmail(true);
     const slot = $('notify-slot');
     if (!slot || !account?.mail?.available) return;
     slot.innerHTML = `<section class="card settings-card">

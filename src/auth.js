@@ -75,6 +75,14 @@ export async function updateProfile(name) {
   } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
 }
 
+// E-Mail ändern: Der Server schickt einen Bestätigungslink an die neue Adresse; erst nach dem Klick gilt sie.
+export async function changeEmail(newEmail) {
+  try {
+    const r = await post('/api/auth/change-email', { newEmail, callbackURL: '/#einstellungen' });
+    return r.ok ? { ok: true } : { ok: false, error: errorText(r) };
+  } catch { return { ok: false, error: 'Server nicht erreichbar.' }; }
+}
+
 export async function changePassword(currentPassword, newPassword) {
   try {
     const r = await post('/api/auth/change-password', { currentPassword, newPassword, revokeOtherSessions: true });

@@ -3,7 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { betterAuth } from 'better-auth';
-import { mailEnabled, sendMail, verifyEmailMail, resetPasswordMail, welcomeMail } from './mail.js';
+import { mailEnabled, sendMail, verifyEmailMail, changeEmailMail, isEmailChangeRequest, resetPasswordMail, welcomeMail } from './mail.js';
 
 const port = Number(process.env.PORT) || 8080;
 const COLS = 'ts, mode, type, correct, total, seconds, seed';
@@ -100,8 +100,14 @@ export const auth = betterAuth({
       sendOnSignIn: true, // bestehende Konten ohne Bestätigung bekommen beim Anmelden einen neuen Link
       autoSignInAfterVerification: true,
       // Willkommens-Mail, sobald die Adresse bestätigt ist (E-Mail-Registrierung)
-      afterEmailVerification: async (user) => { void sendMail({ to: user, ...welcomeMail(user, baseURL) }); },
-      sendVerificationEmail: async ({ user, url }) => { void sendMail({ to: user, ...verifyEmailMail(user, url) }); },
+      // (nicht, wenn nur eine geänderte E-Mail-Adresse bestätigt wurde)
+      afterEmailVerification: async (user, request) => { if (!isEmailChangeRequest(request)) void sendMail({ to: user, ...welcomeMail(user, baseURL) }); },
+      // Bei einer Adressänderung ist user.email die NEUE Adresse (die gespeicherte ist noch die alte) – die Mail geht an die neue Adresse
+      sendVerificationEmail: async ({ user, url }) => {
+        const stored = (await sql.all('SELECT email FROM "user" WHERE id = ?', [user.id]))[0]?.email;
+        const changing = stored != null && stored.toLowerCase() !== user.email.toLowerCase();
+        void sendMail({ to: user, ...(changing ? changeEmailMail(user, url) : verifyEmailMail(user, url)) });
+      },
     },
   } : {}),
   // GitHub-Konten sind bei der Registrierung schon bestätigt: Willkommens-Mail direkt beim Anlegen
@@ -111,6 +117,8 @@ export const auth = betterAuth({
     },
   } : {}),
   user: {
+    // E-Mail ändern: Bestätigungslink an die neue Adresse; erst nach dem Klick gilt sie. Ohne Mailversand nicht möglich.
+    changeEmail: { enabled: mailEnabled },
     deleteUser: {
       enabled: true,
       afterDelete: async (deletedUser) => {

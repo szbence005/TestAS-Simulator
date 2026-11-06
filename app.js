@@ -755,7 +755,17 @@ const HASH_PAGES = { '#pruefung': 'exam', '#ueben': 'practice', '#verlauf': 'his
 async function startGroupTest(gid, tid) {
   const r = await Groups.groupTests(gid);
   const t = r.ok ? r.data.tests.find((x) => x.id === tid) : null;
-  if (t?.released && t.seed != null) return startExam(t.kind, t.seed, t.minutes, gid, { count: t.count, difficulty: t.difficulty });
+  if (t?.released && t.seed != null) {
+    // Ergebnisse nach der Endzeit zählen nicht: vorher warnen, wenn die Zeit nicht mehr reicht
+    const needMs = (t.kind === 'all' ? 3 : 1) * t.minutes * 60_000;
+    if (t.endsAt != null && t.endsAt - Date.now() < needMs) {
+      const left = t.endsAt - Date.now();
+      const text = left <= 0 ? 'Die Endzeit dieses Tests ist abgelaufen. Das Ergebnis zählt nicht mehr für die Wertung.'
+        : `Die Endzeit ist in ${Math.max(1, Math.round(left / 60_000))} Minuten, der Test dauert bis zu ${Math.round(needMs / 60_000)} Minuten. Ergebnisse nach der Endzeit zählen nicht.`;
+      if (!confirm(`${text}\n\nTrotzdem starten?`)) { location.href = `gruppen.html#${encodeURIComponent(gid)}`; return; }
+    }
+    return startExam(t.kind, t.seed, t.minutes, gid, { count: t.count, difficulty: t.difficulty });
+  }
   setScreen('home');
   const msg = t ? `Dieser Test startet erst am ${new Date(t.startsAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Dieser Test ist nicht (mehr) verfügbar.';
   app.innerHTML = `<h1>Gruppentest</h1><section class="card"><p>${esc(msg)}</p><p><a class="btn" href="gruppen.html#${esc(encodeURIComponent(gid))}">Zurück zur Lerngruppe</a></p></section>`;
