@@ -57,13 +57,14 @@ const send = (res, status, body) => res.writeHead(status, { 'Content-Type': 'app
 
 // CSRF-Schutz: Anfragen mit fremdem Origin ablehnen (Cookies sind zusätzlich SameSite=Lax)
 const sameOrigin = (req) => !req.headers.origin || new URL(req.headers.origin).host === req.headers.host;
-const sendCsv = (res, filename, text) => res.writeHead(200, {
-  'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store',
+const sendDownload = (res, filename, contentType, text) => res.writeHead(200, {
+  'Content-Type': contentType, 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
 }).end(text);
+const sendCsv = (res, filename, text) => sendDownload(res, filename, 'text/csv; charset=utf-8', text);
 
 async function groupsRoute(req, res, pathname) {
   const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-  return groupsApi(req, res, pathname, { user: session?.user ?? null, send, sendCsv, readJson, sameOrigin });
+  return groupsApi(req, res, pathname, { user: session?.user ?? null, send, sendCsv, sendDownload, readJson, sameOrigin });
 }
 
 async function historyApi(req, res) {

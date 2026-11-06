@@ -5,7 +5,9 @@ import { renderGroupPage } from './src/group-page.js';
 import * as G from './src/groups.js';
 import { renderAdmin } from './src/admin.js';
 import { renderProfileControl } from './src/profile.js';
+import { applyTheme } from './src/theme.js';
 
+applyTheme();
 const app = document.getElementById('app');
 const ID = /^[\w-]{1,64}$/;
 let user = null;

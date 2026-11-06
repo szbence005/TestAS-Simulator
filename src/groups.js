@@ -60,7 +60,7 @@ export const errorText = (r) => ({
   own_group: 'Das ist deine eigene Gruppe – du leitest sie bereits.',
   consent_required: 'Bitte der Weitergabe zustimmen.',
   invalid: 'Bitte einen Gruppennamen eingeben.',
-  invalid_test: 'Bitte Titel, Umfang, Zeit (1–120 Minuten) und Startzeit prüfen.',
+  invalid_test: 'Bitte Titel, Umfang, Aufgabenzahl (1–40), Schwierigkeit, Zeit (1–120 Minuten) und Startzeit prüfen.',
   invalid_time: 'Die Startzeit darf höchstens einen Tag zurück und zwei Jahre voraus liegen.',
   limit: 'Diese Gruppe hat bereits die Höchstzahl an Tests (100).',
 }[r.data?.error] ?? (r.status === 0 ? 'Server nicht erreichbar.' : `Das hat nicht geklappt (Fehler ${r.status}).`));

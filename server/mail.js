@@ -90,14 +90,14 @@ export const welcomeMail = (user, url) => ({
   }),
 });
 
-export const newTestMail = (user, { groupName, title, kindLabel, minutes, startsAt, url }) => ({
+export const newTestMail = (user, { groupName, title, kindLabel, minutes, count, difficulty, startsAt, url }) => ({
   subject: `Neuer Test in „${groupName}“: ${title}`,
   ...mailTemplate({
     heading: `Neuer Test: ${title}`,
     paragraphs: [
       greeting(user),
       `in deiner Lerngruppe „${groupName}“ wurde ein Test geplant.`,
-      `${kindLabel} · ${minutes} Minuten pro Subtest · ab ${new Date(startsAt).toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Berlin' })} Uhr`,
+      `${kindLabel} · ${count ? `${count} Aufgaben · ` : ''}${difficulty ? `Schwierigkeit: ${difficulty} · ` : ''}${minutes} Minuten pro Subtest · ab ${new Date(startsAt).toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Berlin' })} Uhr`,
     ],
     button: { label: 'Zur Lerngruppe', url },
     note: 'Du erhältst diese E-Mail, weil du Benachrichtigungen aktiviert hast. Du kannst sie jederzeit in den Kontoeinstellungen ausschalten.',

@@ -1,5 +1,6 @@
 import * as Auth from './auth.js';
 import * as G from './groups.js';
+import { getTheme, setTheme } from './theme.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -45,6 +46,14 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
         </form>
       </section>
       <section class="card settings-card">
+        <h2>Darstellung</h2>
+        <p class="settings-desc">Wähle ein helles oder dunkles Design. „Automatisch“ folgt der Einstellung deines Geräts.</p>
+        <fieldset class="theme-options" id="theme-options" aria-label="Darstellung">
+          ${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([value, label]) => `<label class="theme-option"><input type="radio" name="theme" value="${value}"${getTheme() === value ? ' checked' : ''}> ${label}</label>`).join('')}
+        </fieldset>
+        <p class="form-note">Die Auswahl wird auf diesem Gerät gespeichert.</p>
+      </section>
+      <section class="card settings-card">
         <h2>Passwort</h2>
         <p class="settings-desc">Mindestens 8 Zeichen. Andere aktive Sitzungen werden nach der Änderung abgemeldet.</p>
         <form id="password-form">
@@ -60,6 +69,15 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
         </form>
       </section>
       <div id="notify-slot"></div>
+      <section class="card settings-card">
+        <h2>Meine Daten exportieren</h2>
+        <p class="settings-desc">Lade deine gespeicherten Daten herunter: Konto, Gruppen und alle Ergebnisse aus Prüfungen und Übungen. Der Export enthält nur deine eigenen Daten.</p>
+        <div class="export-actions">
+          <a class="btn" id="export-csv" href="/api/account/export?format=csv" download>Verlauf als CSV</a>
+          <a class="btn" id="export-json" href="/api/account/export?format=json" download>Alle Daten als JSON</a>
+        </div>
+        <p class="form-note">CSV öffnet sich direkt in Excel (Semikolon, UTF-8). JSON enthält zusätzlich Kontodaten und Gruppen.</p>
+      </section>
       <section class="card settings-card">
         <h2>Abmelden</h2>
         <p class="settings-desc">Meldet dich auf diesem Gerät ab.</p>
@@ -83,6 +101,7 @@ export function renderAccountSettings({ app, setScreen, goHome, user, onUserUpda
   const $ = (id) => document.getElementById(id);
   $('settings-home').onclick = goHome;
   $('settings-logout').onclick = onLogout;
+  $('theme-options').addEventListener('change', (event) => { if (event.target.name === 'theme') setTheme(event.target.value); });
 
   // E-Mail-Benachrichtigungen (nur wenn der Server E-Mails senden kann)
   G.getAccount().then((account) => {

@@ -1,3 +1,4 @@
+import { applyTheme } from './src/theme.js';
 import { buildExamSet, generateTask, TYPES, LEVELS, EXAM } from './src/tasks.js';
 import { createRng } from './src/rng.js';
 import { LETTERS } from './src/latin.js';
@@ -6,6 +7,8 @@ import * as Auth from './src/auth.js';
 import * as Groups from './src/groups.js';
 import { renderAdmin } from './src/admin.js';
 import { renderAccountInfo, renderAccountSettings } from './src/account.js';
+
+applyTheme();
 
 const app = document.getElementById('app');
 const isSEB = /SEB/i.test(navigator.userAgent);
@@ -315,7 +318,7 @@ function openPlatformPage(page) {
 }
 
 /* ------------------------------------------------------------------ Prüfung */
-function startExam(kind, seed, minutes = EXAM.minutes, groupId = null) {
+function startExam(kind, seed, minutes = EXAM.minutes, groupId = null, options = {}) {
   const useSeed = Number.isFinite(seed) && seed !== null ? seed : Math.floor(Math.random() * 1e9);
   const types = kind === 'all' ? ['figural', 'gleichungen', 'quadrate'] : [kind];
   app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
@@ -323,7 +326,7 @@ function startExam(kind, seed, minutes = EXAM.minutes, groupId = null) {
     S = {
       seed: useSeed, si: 0, groupId,
       sections: types.map((type) => {
-        const tasks = buildExamSet(type, useSeed);
+        const tasks = buildExamSet(type, useSeed, options);
         return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, minutes, limitMs: minutes * 60000 };
       }),
     };
@@ -345,7 +348,7 @@ function renderIntro() {
   const sec = S.sections[S.si];
   app.innerHTML = `<h1>${TYPES[sec.type].label}</h1><p class="muted">Subtest ${S.si + 1} von ${S.sections.length} ${badges()}</p>
     <section class="card">${INSTRUCTIONS[sec.type]}
-      <p>Sie haben <b>${EXAM.count} Aufgaben</b> und <b>${sec.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
+      <p>Sie haben <b>${sec.tasks.length} Aufgaben</b> und <b>${sec.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
       <p class="muted">Tastatur: ← → blättern, bei Quadraten A–E wählen, bei Figuralen Sequenzen 1–3 (Bild 1) und 4–6 (Bild 2), bei Gleichungen Enter = weiter.</p>
       <p><button class="primary" id="go">Subtest starten</button> <button id="abort">Abbrechen</button></p></section>`;
   document.getElementById('go').onclick = () => { sec.startedAt = Date.now(); startTimer(); renderExam(); };
@@ -752,7 +755,7 @@ const HASH_PAGES = { '#pruefung': 'exam', '#ueben': 'practice', '#verlauf': 'his
 async function startGroupTest(gid, tid) {
   const r = await Groups.groupTests(gid);
   const t = r.ok ? r.data.tests.find((x) => x.id === tid) : null;
-  if (t?.released && t.seed != null) return startExam(t.kind, t.seed, t.minutes, gid);
+  if (t?.released && t.seed != null) return startExam(t.kind, t.seed, t.minutes, gid, { count: t.count, difficulty: t.difficulty });
   setScreen('home');
   const msg = t ? `Dieser Test startet erst am ${new Date(t.startsAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Dieser Test ist nicht (mehr) verfügbar.';
   app.innerHTML = `<h1>Gruppentest</h1><section class="card"><p>${esc(msg)}</p><p><a class="btn" href="gruppen.html#${esc(encodeURIComponent(gid))}">Zurück zur Lerngruppe</a></p></section>`;

@@ -4,7 +4,7 @@ import { createRng } from '../src/rng.js';
 import { generateEquation, countSolutions, NAMES } from '../src/equations.js';
 import { generateSquare, LETTERS, deductionDepth } from '../src/latin.js';
 import { generateFigural, ambiguous, _internal } from '../src/figural.js';
-import { buildExamSet, LEVELS, EXAM } from '../src/tasks.js';
+import { buildExamSet, examMix, GROUP_TEST_LIMITS, LEVELS, EXAM } from '../src/tasks.js';
 
 test('Gleichungen: pontosan egy megoldás, és az a tárolt megoldás', () => {
   const rng = createRng(1);
@@ -80,4 +80,27 @@ test('Figurale Sequenzen: egyértelmű szabály, nincs átfedés, a helyes opci�
       if (level === 'hoch') assert.ok(t.rules.length >= 3);
     }
   }
+});
+
+
+test('Prüfungsmischung: Standard bleibt 6/7/7, Gruppentests skalieren sie oder nutzen nur eine Stufe', () => {
+  assert.deepEqual(examMix(), { niedrig: 6, mittel: 7, hoch: 7 });
+  assert.deepEqual(examMix(20, 'gemischt'), { niedrig: 6, mittel: 7, hoch: 7 });
+  assert.deepEqual(examMix(10, 'hoch'), { niedrig: 0, mittel: 0, hoch: 10 });
+  for (let n = GROUP_TEST_LIMITS.minCount; n <= GROUP_TEST_LIMITS.maxCount; n++) {
+    const m = examMix(n, 'gemischt');
+    assert.equal(m.niedrig + m.mittel + m.hoch, n);
+    assert.ok(m.niedrig >= 0 && m.mittel >= 0 && m.hoch >= 0);
+  }
+});
+
+test('Gruppentest-Aufgaben: gewünschte Anzahl, Schwierigkeit und gleicher Seed = gleiche Aufgaben', () => {
+  for (const type of ['figural', 'gleichungen', 'quadrate']) {
+    const set = buildExamSet(type, 123, { count: 7, difficulty: 'niedrig' });
+    assert.equal(set.length, 7);
+    assert.ok(set.every((task) => task.level === 'niedrig'));
+    assert.deepEqual(buildExamSet(type, 123, { count: 7, difficulty: 'niedrig' }).map((t) => t.id), set.map((t) => t.id));
+  }
+  assert.equal(buildExamSet('gleichungen', 5).length, 20); // Standard unverändert
+  assert.equal(buildExamSet('gleichungen', 5, { count: 33 }).length, 33);
 });

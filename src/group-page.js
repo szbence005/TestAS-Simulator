@@ -1,10 +1,11 @@
 // Gruppenseite (Unterseite „Lerngruppen“): Tests der Gruppe.
 // Mitglieder sehen die geplanten Tests und starten sie ab der Startzeit; die Gruppenleitung plant Tests und wertet sie aus.
 import * as G from './groups.js';
-import { TYPES, EXAM } from './tasks.js';
+import { TYPES, EXAM, GROUP_TEST_LIMITS } from './tasks.js';
 import { esc, ICON, codeButton, bindCodeButtons } from './ui.js';
 
 const kindLabel = (kind) => (kind === 'all' ? 'Kernmodul (alle drei Subtests)' : TYPES[kind]?.label ?? kind);
+const DIFF_LABEL = { gemischt: 'gemischt', niedrig: 'niedrig', mittel: 'mittel', hoch: 'hoch' };
 const fmtDate = (ms) => new Date(ms).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 const fmtTime = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 const pctText = (value) => (value == null ? '–' : `${String(value).replace('.', ',')} %`);
@@ -31,7 +32,7 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
     const result = test.result;
     const complete = !owner && test.released && result?.complete;
     const [badge, cls] = !test.released ? ['Geplant', ''] : complete ? ['Abgeschlossen', 'ok'] : ['Verfügbar', 'ok'];
-    const meta = `${esc(kindLabel(test.kind))} · ${test.minutes} Minuten pro Subtest · ab ${esc(fmtDate(test.startsAt))}${owner ? ` · Seed ${test.seed}` : ''}`;
+    const meta = `${esc(kindLabel(test.kind))} · ${test.count ?? EXAM.count} Aufgaben · Schwierigkeit ${esc(DIFF_LABEL[test.difficulty] ?? 'gemischt')} · ${test.minutes} Minuten pro Subtest · ab ${esc(fmtDate(test.startsAt))}${owner ? ` · Seed ${test.seed}` : ''}`;
     let inner;
     if (owner) {
       inner = `<p class="muted test-meta">${test.released ? `${test.completed} von ${data.members} Mitgliedern haben abgeschlossen.` : 'Die Mitglieder sehen den Test erst ab der Startzeit.'}</p>
@@ -97,6 +98,13 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
                  <option value="gleichungen">Nur Mathematische Gleichungen</option>
                  <option value="quadrate">Nur Lateinische Quadrate</option>
                </select></div>
+               <div><label for="gt-count">Aufgaben pro Subtest</label><input id="gt-count" type="number" min="${GROUP_TEST_LIMITS.minCount}" max="${GROUP_TEST_LIMITS.maxCount}" step="1" value="${EXAM.count}"></div>
+               <div><label for="gt-difficulty">Schwierigkeit</label><select id="gt-difficulty">
+                 <option value="gemischt">Gemischt (wie in der Prüfung)</option>
+                 <option value="niedrig">Niedrig</option>
+                 <option value="mittel">Mittel</option>
+                 <option value="hoch">Hoch</option>
+               </select></div>
                <div><label for="gt-minutes">Zeit pro Subtest (Minuten)</label><input id="gt-minutes" type="number" min="1" max="120" step="1" value="${EXAM.minutes}"></div>
                <div><label for="gt-start">Startzeit</label><input id="gt-start" type="datetime-local" value="${localInput(Date.now() + 3_600_000)}"></div>
              </div>
@@ -115,9 +123,13 @@ export function renderGroupPage({ app, setScreen, groupId, goBack, onStatistics 
         $('gt-error').textContent = '';
         if (!$('gt-title').value.trim()) { $('gt-error').textContent = 'Bitte einen Titel eingeben.'; return; }
         if (!Number.isFinite(startsAt)) { $('gt-error').textContent = 'Bitte eine Startzeit wählen.'; return; }
+        const count = Number($('gt-count').value);
+        if (!Number.isInteger(count) || count < GROUP_TEST_LIMITS.minCount || count > GROUP_TEST_LIMITS.maxCount) {
+          $('gt-error').textContent = `Bitte eine Aufgabenzahl von ${GROUP_TEST_LIMITS.minCount} bis ${GROUP_TEST_LIMITS.maxCount} eingeben.`; return;
+        }
         $('gt-create').disabled = true;
         const result = await G.createTest(groupId, {
-          title: $('gt-title').value.trim(), kind: $('gt-kind').value, minutes: Number($('gt-minutes').value), startsAt,
+          title: $('gt-title').value.trim(), kind: $('gt-kind').value, minutes: Number($('gt-minutes').value), count, difficulty: $('gt-difficulty').value, startsAt,
         });
         $('gt-create').disabled = false;
         if (!result.ok) { $('gt-error').textContent = G.errorText(result); return; }

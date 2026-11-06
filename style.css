@@ -7,13 +7,20 @@
   --ok: #4cc38a; --bad: #ff6b6b; --warn: #f0b24a; --focus: #7db7ff;
   --radius: 16px; --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
+/* Hell: automatisch nach Systemeinstellung oder ausdrücklich per data-theme="light" (Einstellungen). data-theme="dark" erzwingt Dunkel. */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     color-scheme: light;
     --bg: #f7f6f3; --surface: #ffffff; --surface-2: #f0eeea; --line: #e2dfd8; --line-strong: #c4c0b5;
     --text: #121214; --muted: #666670; --accent: #e6430f; --accent-ink: #ffffff; --accent-soft: rgba(230, 67, 15, .1);
     --ok: #13794a; --bad: #c62828; --warn: #a55f00; --focus: #0b63ce;
   }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f6f3; --surface: #ffffff; --surface-2: #f0eeea; --line: #e2dfd8; --line-strong: #c4c0b5;
+  --text: #121214; --muted: #666670; --accent: #e6430f; --accent-ink: #ffffff; --accent-soft: rgba(230, 67, 15, .1);
+  --ok: #13794a; --bad: #c62828; --warn: #a55f00; --focus: #0b63ce;
 }
 * { box-sizing: border-box; }
 html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 76px; }
@@ -338,6 +345,15 @@ code, .code { font-family: var(--mono); font-size: .92em; }
 .account-info > button { margin-top: 18px; }
 label.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); margin: 12px 0 0; }
 label.check input { margin-top: 4px; }
+/* Darstellung: Auswahl Automatisch / Hell / Dunkel */
+.theme-options { display: flex; flex-wrap: wrap; gap: 10px; border: 0; padding: 0; margin: 0; }
+.theme-options legend { padding: 0; }
+.theme-option { display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 16px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.theme-option:hover { border-color: var(--accent); }
+.theme-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.theme-option:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.theme-option input { margin: 0; accent-color: var(--accent); }
+.export-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 /* Lerngruppen-Link in der Hauptnavigation nur auf den Konto-Seiten ausblenden */
 body[data-screen="account-info"] .site-nav a[data-page="groups"],
 body[data-screen="settings"] .site-nav a[data-page="groups"],

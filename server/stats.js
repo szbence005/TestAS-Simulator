@@ -83,6 +83,10 @@ export const utc = (ts) => new Date(ts).toISOString().slice(0, 16).replace('T', 
 /* ---------- Gruppentests: vom Gruppenleiter geplante Prüfungen mit Startzeit */
 export const TEST_KINDS = ['all', ...TYPE_KEYS];
 export const MAX_TESTS_PER_GROUP = 100;
+export const TEST_DIFFICULTIES = ['gemischt', 'niedrig', 'mittel', 'hoch'];
+export const DEFAULT_TEST_COUNT = 20;
+export const MIN_TEST_COUNT = 1;
+export const MAX_TEST_COUNT = 40;
 const DAY_MS = 24 * 60 * 60_000;
 
 export const randomSeed = () => randomInt(1, 1_000_000_000); // passt in INTEGER (auch Postgres int4)
@@ -93,15 +97,18 @@ export function parseTestInput(body, now = Date.now(), seed = randomSeed()) {
   const kind = body?.kind;
   const minutes = Number(body?.minutes);
   const startsAt = Number(body?.startsAt);
+  const count = body?.count == null ? DEFAULT_TEST_COUNT : Number(body.count);
+  const difficulty = body?.difficulty == null ? 'gemischt' : body.difficulty;
   if (!title || !TEST_KINDS.includes(kind) || !Number.isInteger(minutes) || minutes < 1 || minutes > 120 || !Number.isSafeInteger(startsAt)) return { error: 'invalid_test' };
+  if (!Number.isInteger(count) || count < MIN_TEST_COUNT || count > MAX_TEST_COUNT || !TEST_DIFFICULTIES.includes(difficulty)) return { error: 'invalid_test' };
   if (startsAt < now - DAY_MS || startsAt > now + 730 * DAY_MS) return { error: 'invalid_time' };
-  return { test: { title, kind, minutes, startsAt, seed } };
+  return { test: { title, kind, minutes, count, difficulty, startsAt, seed } };
 }
 
 /** Was ein Nutzer von einem Test sehen darf: Der Seed (= die Aufgaben) wird erst ab der Startzeit herausgegeben – nur die Gruppenleitung kennt ihn vorher. */
 export function shapeTest(test, { owner = false, now = Date.now() } = {}) {
   const released = test.startsAt <= now;
-  const out = { id: test.id, title: test.title, kind: test.kind, minutes: test.minutes, startsAt: test.startsAt, released };
+  const out = { id: test.id, title: test.title, kind: test.kind, minutes: test.minutes, count: test.count ?? DEFAULT_TEST_COUNT, difficulty: test.difficulty ?? 'gemischt', startsAt: test.startsAt, released };
   if (released || owner) out.seed = test.seed;
   return out;
 }
@@ -126,4 +133,27 @@ export function completedCount(test, entries) {
   const byUser = new Map();
   for (const e of entries) (byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)).push(e);
   return [...byUser.values()].filter((list) => testResult(test, list).complete).length;
+}
+
+/* ---------- Eigene Daten exportieren (Konto → Einstellungen) */
+export const HISTORY_CSV_HEADER = ['Zeit (UTC)', 'Modus', 'Typ', 'Richtig', 'Gesamt', 'Prozent', 'Sekunden', 'Seed'];
+
+/** Verlauf eines Nutzers als CSV (Excel DE/HU). */
+export function historyCsv(entries) {
+  return toCsv(HISTORY_CSV_HEADER, entries.map((e) => [utc(e.ts), e.mode === 'exam' ? 'Prüfung' : 'Übung', e.type, e.correct, e.total, percent(e), e.seconds, e.seed]));
+}
+
+/** Alle gespeicherten Daten des Nutzers als JSON-Objekt (nur eigene Daten, keine Daten anderer Mitglieder). */
+export function accountExport({ user, entries, joined = [], created = [], mail = { notifyTests: false }, now = Date.now() }) {
+  const iso = (ms) => (ms == null ? null : new Date(Number(ms)).toISOString());
+  return {
+    exportedAt: iso(now),
+    account: { id: user.id, name: user.name, email: user.email, createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null },
+    settings: { notifyNewTests: Boolean(mail.notifyTests) },
+    groups: {
+      memberOf: joined.map((g) => ({ id: g.id, name: g.name, joinedAt: iso(g.joinedAt) })),
+      ownerOf: created.map((g) => ({ id: g.id, name: g.name, code: g.code, createdAt: iso(g.createdAt), members: g.members })),
+    },
+    history: entries.map((e) => ({ time: iso(e.ts), mode: e.mode, type: e.type, correct: e.correct, total: e.total, percent: percent(e), seconds: e.seconds ?? null, seed: e.seed ?? null })),
+  };
 }

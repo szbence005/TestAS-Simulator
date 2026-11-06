@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, trend, csvCell, toCsv, parseTestInput, shapeTest, testResult, completedCount, randomSeed } from '../server/stats.js';
+import { generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, trend, csvCell, toCsv, parseTestInput, historyCsv, accountExport, shapeTest, testResult, completedCount, randomSeed } from '../server/stats.js';
 
 const e = (ts, mode, type, correct, total = 20, seed = null) => ({ ts, mode, type, correct, total, seed });
 const MIN = 60_000;
@@ -70,7 +70,7 @@ const ex = (user_id, ts, type, correct, total = 20, seed = 4711, seconds = 600) 
 
 test('Gruppentest planen: Eingaben prüfen, Titel kürzen, Zeitfenster begrenzen', () => {
   const ok = parseTestInput({ title: '  Probe 1  ', kind: 'figural', minutes: '30', startsAt: NOW + HOUR }, NOW, 99);
-  assert.deepEqual(ok.test, { title: 'Probe 1', kind: 'figural', minutes: 30, startsAt: NOW + HOUR, seed: 99 });
+  assert.deepEqual(ok.test, { title: 'Probe 1', kind: 'figural', minutes: 30, count: 20, difficulty: 'gemischt', startsAt: NOW + HOUR, seed: 99 });
   assert.equal(parseTestInput({ title: 'x'.repeat(200), kind: 'all', minutes: 25, startsAt: NOW }, NOW).test.title.length, 80);
   const bad = (patch) => parseTestInput({ title: 'T', kind: 'all', minutes: 25, startsAt: NOW, ...patch }, NOW).error;
   assert.equal(bad({ title: '   ' }), 'invalid_test');
@@ -124,4 +124,43 @@ test('Gruppentest: abgeschlossen zählt nur, wer alle Subtests des Tests gemacht
   assert.equal(completedCount(T, rows), 1);
   assert.equal(completedCount({ ...T, kind: 'figural' }, rows), 2);
   assert.equal(completedCount(T, []), 0);
+});
+
+test('Gruppentest planen: Aufgabenzahl (1–40) und Schwierigkeit werden geprüft und übernommen', () => {
+  const base = { title: 'T', kind: 'all', minutes: 25, startsAt: NOW };
+  const ok = parseTestInput({ ...base, count: '12', difficulty: 'hoch' }, NOW, 1);
+  assert.equal(ok.test.count, 12);
+  assert.equal(ok.test.difficulty, 'hoch');
+  for (const count of [0, 41, 2.5, 'viele']) assert.equal(parseTestInput({ ...base, count }, NOW).error, 'invalid_test');
+  assert.equal(parseTestInput({ ...base, difficulty: 'extrem' }, NOW).error, 'invalid_test');
+  assert.equal(parseTestInput({ ...base, count: 1 }, NOW).test.count, 1);
+  assert.equal(parseTestInput({ ...base, count: 40 }, NOW).test.count, 40);
+  // Ohne Angaben (ältere Clients): wie bisher 20 Aufgaben, gemischt
+  assert.deepEqual([parseTestInput(base, NOW).test.count, parseTestInput(base, NOW).test.difficulty], [20, 'gemischt']);
+});
+
+test('Gruppentest: Anzahl und Schwierigkeit erscheinen in der Ausgabe, ältere Tests behalten die Standardwerte', () => {
+  assert.equal(shapeTest({ ...T, count: 10, difficulty: 'niedrig' }, { now: NOW }).count, 10);
+  assert.equal(shapeTest({ ...T, count: 10, difficulty: 'niedrig' }, { now: NOW }).difficulty, 'niedrig');
+  assert.equal(shapeTest(T, { now: NOW }).count, 20);
+  assert.equal(shapeTest(T, { now: NOW }).difficulty, 'gemischt');
+});
+
+test('Eigener Datenexport: CSV und JSON enthalten nur die eigenen Daten', () => {
+  const entries = [{ ts: Date.UTC(2026, 10, 6, 9, 30), mode: 'exam', type: 'figural', correct: 15, total: 20, seconds: 600, seed: 42 }];
+  const csv = historyCsv(entries);
+  assert.ok(csv.startsWith('\uFEFFZeit (UTC);Modus;Typ;'));
+  assert.ok(csv.includes('2026-11-06 09:30;Prüfung;figural;15;20;75;600;42'));
+  const out = accountExport({
+    user: { id: 'u1', name: 'Anna', email: 'a@x.de', createdAt: '2026-01-02T03:04:05Z' }, entries,
+    joined: [{ id: 'g1', name: 'Gruppe', joinedAt: 0 }], created: [{ id: 'g2', name: 'Meine', code: 'ABCD-EFGH', createdAt: 0, members: 3 }],
+    mail: { notifyTests: true }, now: 0,
+  });
+  assert.equal(out.account.email, 'a@x.de');
+  assert.equal(out.account.createdAt, '2026-01-02T03:04:05.000Z');
+  assert.equal(out.settings.notifyNewTests, true);
+  assert.equal(out.groups.memberOf[0].name, 'Gruppe');
+  assert.equal(out.groups.ownerOf[0].members, 3);
+  assert.deepEqual(out.history[0], { time: '2026-11-06T09:30:00.000Z', mode: 'exam', type: 'figural', correct: 15, total: 20, percent: 75, seconds: 600, seed: 42 });
+  assert.equal(accountExport({ user: { id: 'u', name: 'n', email: 'e' }, entries: [] }).account.createdAt, null);
 });
