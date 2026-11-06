@@ -90,14 +90,35 @@ export const welcomeMail = (user, url) => ({
   }),
 });
 
-export const newTestMail = (user, { groupName, title, kindLabel, minutes, count, difficulty, startsAt, url }) => ({
+export const changeEmailMail = (user, url) => ({
+  subject: 'Bitte bestätige deine neue E-Mail-Adresse',
+  ...mailTemplate({
+    heading: 'Neue E-Mail-Adresse bestätigen',
+    paragraphs: [greeting(user), 'für dein Konto beim TestAS Simulator wurde diese E-Mail-Adresse als neue Adresse angegeben. Sie gilt erst, wenn du sie bestätigst – danach meldest du dich mit ihr an.'],
+    button: { label: 'Neue Adresse bestätigen', url },
+    note: 'Wenn du das nicht angefordert hast, kannst du diese E-Mail ignorieren – dein Konto bleibt unverändert.',
+  }),
+});
+
+/** Ob eine Bestätigungsanfrage von Better Auth eine E-Mail-Änderung betrifft (Token-Inhalt; die Signatur prüft Better Auth selbst). */
+export function isEmailChangeRequest(request) {
+  try {
+    const token = new URL(request.url, 'http://x').searchParams.get('token');
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    return String(payload.requestType ?? '').startsWith('change-email');
+  } catch { return false; }
+}
+
+const fmtDateTime = (ms) => `${new Date(ms).toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Berlin' })} Uhr`;
+
+export const newTestMail = (user, { groupName, title, kindLabel, minutes, count, difficulty, startsAt, endsAt, url }) => ({
   subject: `Neuer Test in „${groupName}“: ${title}`,
   ...mailTemplate({
     heading: `Neuer Test: ${title}`,
     paragraphs: [
       greeting(user),
       `in deiner Lerngruppe „${groupName}“ wurde ein Test geplant.`,
-      `${kindLabel} · ${count ? `${count} Aufgaben · ` : ''}${difficulty ? `Schwierigkeit: ${difficulty} · ` : ''}${minutes} Minuten pro Subtest · ab ${new Date(startsAt).toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Berlin' })} Uhr`,
+      `${kindLabel} · ${count ? `${count} Aufgaben · ` : ''}${difficulty ? `Schwierigkeit: ${difficulty} · ` : ''}${minutes} Minuten pro Subtest · ab ${fmtDateTime(startsAt)}${endsAt ? ` · bis ${fmtDateTime(endsAt)}` : ''}`,
     ],
     button: { label: 'Zur Lerngruppe', url },
     note: 'Du erhältst diese E-Mail, weil du Benachrichtigungen aktiviert hast. Du kannst sie jederzeit in den Kontoeinstellungen ausschalten.',

@@ -166,13 +166,16 @@ function bindTask(task, onAnswer, onEnter) {
 }
 
 /* ------------------------------------------------------------------ Startseite */
+const historyKey = (h) => `${h.ts}|${h.mode}|${h.type}`;
+
 function historyHTML(limit = 8) {
   const hist = store.get(HISTORY_KEY, []).slice(0, limit);
   const table = hist.length
-    ? `<div class="card"><table><thead><tr><th>Datum</th><th>Modus</th><th>Typ</th><th>Ergebnis</th></tr></thead><tbody>
+    ? `<div class="card"><table><thead><tr><th>Datum</th><th>Modus</th><th>Typ</th><th>Ergebnis</th><th><span class="visually-hidden">Details</span></th></tr></thead><tbody>
         ${hist.map((h) => `<tr><td>${esc(new Date(h.ts).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
           <td>${h.mode === 'exam' ? 'Prüfung' : 'Übung'}</td><td>${esc(TYPES[h.type]?.label ?? h.type)}</td>
-          <td>${h.correct}/${h.total}${h.seconds ? ` · ${fmt(h.seconds * 1000)}` : ''}${h.seed != null ? ` · Seed ${h.seed}` : ''}</td></tr>`).join('')}
+          <td>${h.correct}/${h.total}${h.seconds ? ` · ${fmt(h.seconds * 1000)}` : ''}${h.seed != null ? ` · Seed ${h.seed}` : ''}</td>
+          <td>${h.detail ? `<button type="button" class="small" data-detail="${esc(historyKey(h))}">Details</button>` : ''}</td></tr>`).join('')}
         </tbody></table></div>`
     : '<p class="lead muted">Noch keine Ergebnisse – starten Sie eine Prüfung oder eine Übung.</p>';
   return table;
@@ -297,6 +300,69 @@ function renderPracticePage() {
     startPractice(document.getElementById('prac-type').value, document.getElementById('prac-level').value);
 }
 
+// Antwort für die Speicherung: nur Zahlen, Buchstaben, [Bild 1, Bild 2] oder null
+const plainAnswer = (a) => (Array.isArray(a) ? a.map((x) => (x ?? null)) : (a ?? null));
+// Gespeicherte Antworten nie ungeprüft in HTML einsetzen (Verlauf liegt im Browser bzw. kommt vom Server)
+function safeAnswer(type, a) {
+  if (type === 'gleichungen') return typeof a === 'number' && Number.isFinite(a) ? a : null;
+  if (type === 'quadrate') return typeof a === 'string' && /^[A-E]$/.test(a) ? a : null;
+  return Array.isArray(a) && a.length === 2 ? a.map((x) => (Number.isInteger(x) ? x : null)) : null;
+}
+
+/** Aufgabenliste mit Richtig/Falsch, Antwort, Lösung und – wenn vorhanden – der Aufgabe selbst. items: [{ id, level, answer, correct, task|null }] */
+function reviewHTML(items) {
+  return `<div class="review-list">${items.map((it) => {
+    const ok = same(it.answer, it.correct);
+    return `<details class="${ok ? 'ok' : 'wrong'}"><summary>${ok ? '✔' : '✘'} ${esc(it.id)} · ${esc(it.level)} · Ihre Antwort: ${esc(showAns(it.answer))} · richtig: ${esc(showAns(it.correct))}</summary>
+      <div class="review-task">${it.task ? taskHTML(it.task, { answer: it.answer, reveal: true, interactive: false }) : '<p class="muted">Die Aufgabe lässt sich nicht mehr darstellen.</p>'}</div></details>`;
+  }).join('')}</div>`;
+}
+
+/** Aufgaben eines Verlaufseintrags wiederherstellen. Stimmt eine Lösung nicht mit der gespeicherten überein (z. B. nach einer Änderung der Generatoren), wird die Aufgabe nicht angezeigt. */
+function historyItems(h) {
+  const d = h.detail;
+  const fits = (task, correct) => task && JSON.stringify(task.answer) === JSON.stringify(correct);
+  if (h.mode === 'exam') {
+    let tasks = [];
+    try { tasks = buildExamSet(h.type, h.seed, { count: d.n, difficulty: d.d }); } catch { /* nicht rekonstruierbar */ }
+    return d.c.map((correct, k) => ({
+      id: tasks[k]?.id ?? `${h.type[0].toUpperCase()}${String(k + 1).padStart(2, '0')}`, level: fits(tasks[k], correct) ? tasks[k].level : '–',
+      answer: safeAnswer(h.type, d.a[k]), correct, task: fits(tasks[k], correct) ? tasks[k] : null,
+    }));
+  }
+  return d.t.map((x, k) => {
+    let task = null;
+    try { task = generateTask(createRng(x.s), h.type, x.l); } catch { /* nicht rekonstruierbar */ }
+    return { id: `#${k + 1}`, level: x.l, answer: safeAnswer(h.type, x.a), correct: x.c, task: fits(task, x.c) ? task : null };
+  });
+}
+
+function renderHistoryDetail(key) {
+  const h = store.get(HISTORY_KEY, []).find((x) => historyKey(x) === key);
+  if (!h?.detail) return renderHistoryPage();
+  setScreen('history-page');
+  app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
+  setTimeout(() => {
+    const items = historyItems(h);
+    const wrong = items.filter((it) => !same(it.answer, it.correct)).length;
+    const blank = items.filter((it) => !answered(it.answer)).length;
+    app.innerHTML = `
+      <div class="row" style="margin-top:14px"><button type="button" id="hd-back">‹ Verlauf</button></div>
+      <h1>${esc(TYPES[h.type]?.label ?? h.type)}</h1>
+      <p class="lead muted">${h.mode === 'exam' ? 'Prüfung' : 'Übung'} · ${esc(new Date(h.ts).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }))}${h.seed != null ? ` · Seed ${h.seed}` : ''}</p>
+      <section class="card"><div class="score">${h.correct} / ${h.total}</div>
+        <p class="muted">${h.seconds ? `Zeit: ${fmt(h.seconds * 1000)} · ` : ''}falsch: ${wrong - blank} · unbeantwortet: ${blank}</p>
+        <label class="check"><input type="checkbox" id="hd-wrong"> Nur falsche und unbeantwortete Aufgaben zeigen</label></section>
+      <section class="card" id="hd-list">${reviewHTML(items)}</section>`;
+    document.getElementById('hd-back').onclick = renderHistoryPage;
+    document.getElementById('hd-wrong').onchange = (e) => document.getElementById('hd-list').classList.toggle('only-wrong', e.target.checked);
+  }, 30);
+}
+app.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-detail]');
+  if (button) renderHistoryDetail(button.dataset.detail);
+});
+
 function renderHistoryPage() {
   setScreen('history-page');
   app.innerHTML = `
@@ -324,7 +390,7 @@ function startExam(kind, seed, minutes = EXAM.minutes, groupId = null, options =
   app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
   setTimeout(() => {
     S = {
-      seed: useSeed, si: 0, groupId,
+      seed: useSeed, si: 0, groupId, difficulty: options.difficulty ?? 'gemischt',
       sections: types.map((type) => {
         const tasks = buildExamSet(type, useSeed, options);
         return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, minutes, limitMs: minutes * 60000 };
@@ -434,7 +500,9 @@ function renderResult() {
   for (const sec of S.sections) {
     const correct = sec.tasks.filter((t, k) => same(sec.answers[k], t.answer)).length;
     const seconds = Math.min(Math.round((sec.endedAt - sec.startedAt) / 1000), sec.limitMs / 1000);
-    const entry = { ts: Date.now(), mode: 'exam', type: sec.type, correct, total: sec.tasks.length, seconds, seed: S.seed };
+    // Details für die Verlaufs-Detailansicht: Die Aufgaben ergeben sich aus Seed, Anzahl und Schwierigkeit; gespeichert werden Antworten und Lösungen
+    const detail = { n: sec.tasks.length, d: S.difficulty, a: sec.answers.map(plainAnswer), c: sec.tasks.map((t) => t.answer) };
+    const entry = { ts: Date.now(), mode: 'exam', type: sec.type, correct, total: sec.tasks.length, seconds, seed: S.seed, detail };
     history.unshift(entry);
     fresh.push(entry);
     const byLevel = LEVELS.map((l) => {
@@ -446,11 +514,7 @@ function renderResult() {
       <p class="muted">Zeit: ${fmt(seconds * 1000)} von ${sec.minutes}:00${sec.auto ? ' (Zeit abgelaufen)' : ''} · unbeantwortet: ${sec.answers.filter((a) => !answered(a)).length}</p>
       <table><thead><tr><th>Schwierigkeit</th><th>Richtig</th></tr></thead><tbody>${byLevel}</tbody></table>
       <h2>Auswertung der Aufgaben</h2>
-      ${sec.tasks.map((t, k) => {
-        const ok = same(sec.answers[k], t.answer);
-        return `<details><summary>${ok ? '✔' : '✘'} ${t.id} · ${t.level} · Ihre Antwort: ${showAns(sec.answers[k])} · richtig: ${showAns(t.answer)}</summary>
-          <div class="review-task">${taskHTML(t, { answer: sec.answers[k], reveal: true, interactive: false })}</div></details>`;
-      }).join('')}</section>`;
+      ${reviewHTML(sec.tasks.map((t, k) => ({ id: t.id, level: t.level, answer: sec.answers[k], correct: t.answer, task: t })))}</section>`;
   }
   store.set(HISTORY_KEY, history.slice(0, 50));
   if (user) Auth.pushHistory(fresh);
@@ -463,13 +527,15 @@ function renderResult() {
 
 /* ------------------------------------------------------------------ Übungsmodus */
 function startPractice(type, level) {
-  P = { type, level, rng: createRng(Date.now()), task: null, answer: null, checked: false, correct: 0, total: 0 };
+  P = { type, level, rng: createRng(Date.now()), task: null, taskSeed: null, log: [], answer: null, checked: false, correct: 0, total: 0 };
   nextPractice();
 }
 
 function nextPractice() {
   const lvl = P.level === 'gemischt' ? P.rng.pick(LEVELS) : P.level;
-  P.task = generateTask(P.rng, P.type, lvl);
+  // Jede Aufgabe hat einen eigenen Seed, damit sie im Verlauf wieder angezeigt werden kann
+  P.taskSeed = Math.floor(Math.random() * 1e9) + 1;
+  P.task = generateTask(createRng(P.taskSeed), P.type, lvl);
   P.answer = null;
   P.checked = false;
   renderPractice();
@@ -498,13 +564,14 @@ function checkPractice() {
   if (!answered(P.answer)) { document.getElementById('msg').textContent = 'Bitte zuerst eine Antwort geben.'; return; }
   P.checked = true;
   P.total++;
+  P.log.push({ s: P.taskSeed, l: P.task.level, a: plainAnswer(P.answer), c: P.task.answer });
   if (same(P.answer, P.task.answer)) P.correct++;
   renderPractice();
 }
 
 function endPractice() {
   if (P.total > 0) {
-    const entry = { ts: Date.now(), mode: 'practice', type: P.type, correct: P.correct, total: P.total };
+    const entry = { ts: Date.now(), mode: 'practice', type: P.type, correct: P.correct, total: P.total, detail: { t: P.log } };
     store.set(HISTORY_KEY, [entry, ...store.get(HISTORY_KEY, [])].slice(0, 50));
     if (user) Auth.pushHistory([entry]);
   }
@@ -755,7 +822,17 @@ const HASH_PAGES = { '#pruefung': 'exam', '#ueben': 'practice', '#verlauf': 'his
 async function startGroupTest(gid, tid) {
   const r = await Groups.groupTests(gid);
   const t = r.ok ? r.data.tests.find((x) => x.id === tid) : null;
-  if (t?.released && t.seed != null) return startExam(t.kind, t.seed, t.minutes, gid, { count: t.count, difficulty: t.difficulty });
+  if (t?.released && t.seed != null) {
+    // Ergebnisse nach der Endzeit zählen nicht: vorher warnen, wenn die Zeit nicht mehr reicht
+    const needMs = (t.kind === 'all' ? 3 : 1) * t.minutes * 60_000;
+    if (t.endsAt != null && t.endsAt - Date.now() < needMs) {
+      const left = t.endsAt - Date.now();
+      const text = left <= 0 ? 'Die Endzeit dieses Tests ist abgelaufen. Das Ergebnis zählt nicht mehr für die Wertung.'
+        : `Die Endzeit ist in ${Math.max(1, Math.round(left / 60_000))} Minuten, der Test dauert bis zu ${Math.round(needMs / 60_000)} Minuten. Ergebnisse nach der Endzeit zählen nicht.`;
+      if (!confirm(`${text}\n\nTrotzdem starten?`)) { location.href = `gruppen.html#${encodeURIComponent(gid)}`; return; }
+    }
+    return startExam(t.kind, t.seed, t.minutes, gid, { count: t.count, difficulty: t.difficulty });
+  }
   setScreen('home');
   const msg = t ? `Dieser Test startet erst am ${new Date(t.startsAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}.` : 'Dieser Test ist nicht (mehr) verfügbar.';
   app.innerHTML = `<h1>Gruppentest</h1><section class="card"><p>${esc(msg)}</p><p><a class="btn" href="gruppen.html#${esc(encodeURIComponent(gid))}">Zurück zur Lerngruppe</a></p></section>`;

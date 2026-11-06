@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql, baseURL } from './auth.js';
 import { mailEnabled, sendMail, newTestMail } from './mail.js';
-import { TYPE_KEYS, historyCsv, accountExport, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc, parseTestInput, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
+import { TYPE_KEYS, historyCsv, accountExport, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc, parseTestInput, parseTestUpdate, testResultsCsv, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
 
 const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS);
 export const isAdmin = (user) => Boolean(user?.email) && adminEmails.has(user.email.toLowerCase());
@@ -22,8 +22,9 @@ export async function ensureGroupTables() {
   await sql.run(`CREATE TABLE IF NOT EXISTS group_tests (
     id TEXT PRIMARY KEY, group_id TEXT NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL, minutes INTEGER NOT NULL,
     seed INTEGER NOT NULL, starts_at ${sql.bigint} NOT NULL, created_at ${sql.bigint} NOT NULL)`);
-  // Anzahl der Aufgaben je Subtest und Schwierigkeit (spätere Ergänzung; bestehende Tests behalten 20 Aufgaben, gemischt)
-  for (const column of ['task_count INTEGER NOT NULL DEFAULT 20', "difficulty TEXT NOT NULL DEFAULT 'gemischt'"]) {
+  // Spätere Ergänzungen: Anzahl der Aufgaben je Subtest, Schwierigkeit (bestehende Tests behalten 20 Aufgaben, gemischt)
+  // und eine optionale Endzeit (NULL = offen)
+  for (const column of ['task_count INTEGER NOT NULL DEFAULT 20', "difficulty TEXT NOT NULL DEFAULT 'gemischt'", `ends_at ${sql.bigint}`]) {
     try { await sql.run(`ALTER TABLE group_tests ADD COLUMN ${column}`); }
     catch (error) {
       if (error.code !== '42701' && !/duplicate column name/i.test(error.message)) throw error;
@@ -48,7 +49,7 @@ function tooManyMisses(uid) {
 }
 const noteMiss = (uid) => misses.set(uid, [...(misses.get(uid) ?? []), Date.now()]);
 
-const testRow = (r) => ({ id: r.id, title: r.title, kind: r.kind, minutes: num(r.minutes), count: num(r.task_count) ?? 20, difficulty: r.difficulty ?? 'gemischt', seed: num(r.seed), startsAt: num(r.starts_at), createdAt: num(r.created_at) });
+const testRow = (r) => ({ id: r.id, title: r.title, kind: r.kind, minutes: num(r.minutes), count: num(r.task_count) ?? 20, difficulty: r.difficulty ?? 'gemischt', seed: num(r.seed), startsAt: num(r.starts_at), endsAt: r.ends_at == null ? null : num(r.ends_at), createdAt: num(r.created_at) });
 
 const db = {
   groupByCode: async (code) => (await sql.all('SELECT id, name, created_by FROM study_groups WHERE code = ?', [code]))[0],
@@ -81,16 +82,19 @@ const db = {
     }
   },
   tests: async (gid) => (await sql.all(
-    'SELECT id, title, kind, minutes, task_count, difficulty, seed, starts_at, created_at FROM group_tests WHERE group_id = ? ORDER BY starts_at DESC, created_at DESC', [gid])).map(testRow),
+    'SELECT id, title, kind, minutes, task_count, difficulty, seed, starts_at, ends_at, created_at FROM group_tests WHERE group_id = ? ORDER BY starts_at DESC, created_at DESC', [gid])).map(testRow),
   test: async (gid, tid) => (await sql.all(
-    'SELECT id, title, kind, minutes, task_count, difficulty, seed, starts_at, created_at FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid])).map(testRow)[0],
+    'SELECT id, title, kind, minutes, task_count, difficulty, seed, starts_at, ends_at, created_at FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid])).map(testRow)[0],
   testCount: async (gid) => Number((await sql.all('SELECT COUNT(*) AS n FROM group_tests WHERE group_id = ?', [gid]))[0].n),
   createTest: async (gid, t) => {
     const id = randomUUID();
-    await sql.run('INSERT INTO group_tests (id, group_id, title, kind, minutes, task_count, difficulty, seed, starts_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, gid, t.title, t.kind, t.minutes, t.count, t.difficulty, t.seed, t.startsAt, Date.now()]);
+    await sql.run('INSERT INTO group_tests (id, group_id, title, kind, minutes, task_count, difficulty, seed, starts_at, ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, gid, t.title, t.kind, t.minutes, t.count, t.difficulty, t.seed, t.startsAt, t.endsAt ?? null, Date.now()]);
     return id;
   },
+  // Seed und Umfang (kind) bleiben unverändert – die Aufgaben ändern sich nur über Aufgabenzahl und Schwierigkeit
+  updateTest: (gid, tid, t) => sql.run('UPDATE group_tests SET title = ?, minutes = ?, task_count = ?, difficulty = ?, starts_at = ?, ends_at = ? WHERE group_id = ? AND id = ?',
+    [t.title, t.minutes, t.count, t.difficulty, t.startsAt, t.endsAt ?? null, gid, tid]),
   removeTest: (gid, tid) => sql.run('DELETE FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid]),
   // Prüfungsergebnisse der aktuellen Gruppenmitglieder mit einem der Seeds (Grundlage für die Auswertung der Tests)
   examEntries: async (gid, seeds) => (!seeds.length ? [] : (await sql.all(
@@ -226,19 +230,19 @@ async function notifyNewTest(group, test) {
       to: person,
       ...newTestMail(person, {
         groupName: group.name, title: test.title, kindLabel: KIND_LABEL[test.kind] ?? test.kind,
-        minutes: test.minutes, count: test.count, difficulty: test.difficulty, startsAt: test.startsAt, url: `${baseURL}/gruppen.html#${encodeURIComponent(group.id)}`,
+        minutes: test.minutes, count: test.count, difficulty: test.difficulty, startsAt: test.startsAt, endsAt: test.endsAt, url: `${baseURL}/gruppen.html#${encodeURIComponent(group.id)}`,
       }),
     });
   }
 }
 
-const slug = (s) => s.normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'gruppe';
+const slug = (s) => s.normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'gruppe';
 
 /**
  * /api/groups/:id/tests[/:tid] – Gruppentests.
- * Mitglieder: nur die Liste lesen (Seed erst ab Startzeit). Gruppenleitung: planen, auswerten, löschen.
+ * Mitglieder: nur die Liste lesen (Seed erst ab Startzeit). Gruppenleitung: planen, ändern, auswerten (auch als CSV), löschen.
  */
-async function testsApi({ req, res, gid, group, owner, user, tid, method, send, readJson }) {
+async function testsApi({ req, res, gid, group, owner, user, tid, sub, method, send, sendCsv, readJson }) {
   const now = Date.now();
   if (!tid) {
     if (method === 'GET') {
@@ -268,14 +272,27 @@ async function testsApi({ req, res, gid, group, owner, user, tid, method, send, 
   }
   const test = await db.test(gid, tid);
   if (!test) return send(res, 404, { error: 'not_found' });
-  if (method === 'GET') {
+  // Ergebnisse je Mitglied. Mit ignoreEnd werden auch Versuche nach der Endzeit mitgezählt (nur für die Sperre beim Bearbeiten).
+  const memberResults = async (ignoreEnd = false) => {
     const [entries, members] = await Promise.all([db.examEntries(gid, [test.seed]), db.members(gid)]);
     const byUser = new Map();
     for (const e of entries) (byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)).push(e);
-    return send(res, 200, {
-      test: shapeTest(test, { owner: true, now }),
-      members: members.map((m) => ({ ...memberOut(m), result: testResult(test, byUser.get(m.id) ?? []) })),
-    });
+    const scored = ignoreEnd ? { ...test, endsAt: null } : test;
+    return members.map((m) => ({ ...memberOut(m), result: testResult(scored, byUser.get(m.id) ?? []) }));
+  };
+  if (sub === 'export') {
+    if (method !== 'GET') return send(res, 405, { error: 'method' });
+    const stamp = new Date().toISOString().slice(0, 10);
+    return sendCsv(res, `${slug(group.name)}-${slug(test.title)}-ergebnisse-${stamp}.csv`, testResultsCsv(test, await memberResults()));
+  }
+  if (sub) return send(res, 404, { error: 'not_found' });
+  if (method === 'GET') return send(res, 200, { test: shapeTest(test, { owner: true, now }), members: await memberResults() });
+  if (method === 'PATCH') {
+    const hasResults = (await memberResults(true)).some((m) => m.result.done > 0);
+    const parsed = parseTestUpdate(test, await readJson(req), { now, hasResults });
+    if (parsed.error) return send(res, 400, { error: parsed.error });
+    await db.updateTest(gid, tid, parsed.patch);
+    return send(res, 200, { test: shapeTest({ ...test, ...parsed.patch }, { owner: true, now }) });
   }
   if (method === 'DELETE') { await db.removeTest(gid, tid); return send(res, 200, { ok: true }); }
   return send(res, 405, { error: 'method' });
@@ -328,7 +345,7 @@ export async function groupsApi(req, res, pathname, ctx) {
       if (!group) return send(res, 404, { error: 'not_found' });
       if (b === 'tests') {
         if (c && !ID.test(c)) return send(res, 404, { error: 'not_found' });
-        return testsApi({ req, res, gid: a, group, owner, user, tid: c, method, send, readJson });
+        return testsApi({ req, res, gid: a, group, owner, user, tid: c, sub: d, method, send, sendCsv, readJson });
       }
       if (!b) {
         if (method === 'GET') return send(res, 200, { group, members: await groupOverview(a) });

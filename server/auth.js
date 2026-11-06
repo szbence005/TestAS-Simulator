@@ -3,10 +3,11 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { betterAuth } from 'better-auth';
-import { mailEnabled, sendMail, verifyEmailMail, resetPasswordMail, welcomeMail } from './mail.js';
+import { mailEnabled, sendMail, verifyEmailMail, changeEmailMail, isEmailChangeRequest, resetPasswordMail, welcomeMail } from './mail.js';
 
 const port = Number(process.env.PORT) || 8080;
-const COLS = 'ts, mode, type, correct, total, seconds, seed';
+const COLS = 'ts, mode, type, correct, total, seconds, seed, detail';
+const parseDetail = (text) => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
 
 let database;
 let history; // { list(uid), add(uid, rows) } – gleiche Schnittstelle für beide Datenbanken
@@ -19,6 +20,7 @@ if (process.env.DATABASE_URL) {
     user_id TEXT NOT NULL, ts BIGINT NOT NULL, mode TEXT NOT NULL, type TEXT NOT NULL,
     correct INTEGER NOT NULL, total INTEGER NOT NULL, seconds INTEGER, seed INTEGER,
     PRIMARY KEY (user_id, ts, mode, type))`);
+  await pool.query('ALTER TABLE history ADD COLUMN IF NOT EXISTS detail TEXT'); // Antworten je Aufgabe (JSON) für die Detailansicht
   database = pool;
   const toPg = (text) => { let i = 0; return text.replace(/\?/g, () => `$${++i}`); };
   sql = {
@@ -29,15 +31,15 @@ if (process.env.DATABASE_URL) {
   history = {
     async list(uid) {
       const r = await pool.query(`SELECT ${COLS} FROM history WHERE user_id = $1 ORDER BY ts DESC LIMIT 200`, [uid]);
-      return r.rows.map((x) => ({ ...x, ts: Number(x.ts) })); // BIGINT kommt als String
+      return r.rows.map((x) => ({ ...x, ts: Number(x.ts), detail: parseDetail(x.detail) })); // BIGINT kommt als String
     },
     async add(uid, rows) {
       const c = await pool.connect();
       try {
         await c.query('BEGIN');
         for (const e of rows) {
-          await c.query(`INSERT INTO history (user_id, ${COLS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
-            [uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null]);
+          await c.query(`INSERT INTO history (user_id, ${COLS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+            [uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null]);
         }
         await c.query('COMMIT');
       } catch (err) { await c.query('ROLLBACK'); throw err; } finally { c.release(); }
@@ -53,8 +55,10 @@ if (process.env.DATABASE_URL) {
     user_id TEXT NOT NULL, ts INTEGER NOT NULL, mode TEXT NOT NULL, type TEXT NOT NULL,
     correct INTEGER NOT NULL, total INTEGER NOT NULL, seconds INTEGER, seed INTEGER,
     PRIMARY KEY (user_id, ts, mode, type))`);
+  try { db.exec('ALTER TABLE history ADD COLUMN detail TEXT'); } // Antworten je Aufgabe (JSON) für die Detailansicht
+  catch (error) { if (!/duplicate column name/i.test(error.message)) throw error; }
   const list = db.prepare(`SELECT ${COLS} FROM history WHERE user_id = ? ORDER BY ts DESC LIMIT 200`);
-  const ins = db.prepare(`INSERT OR IGNORE INTO history (user_id, ${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = db.prepare(`INSERT OR IGNORE INTO history (user_id, ${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   database = db;
   sql = {
     bigint: 'INTEGER',
@@ -62,8 +66,8 @@ if (process.env.DATABASE_URL) {
     async run(text, params = []) { return db.prepare(text).run(...params).changes; },
   };
   history = {
-    async list(uid) { return list.all(uid); },
-    async add(uid, rows) { db.transaction(() => rows.forEach((e) => ins.run(uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null)))(); },
+    async list(uid) { return list.all(uid).map((x) => ({ ...x, detail: parseDetail(x.detail) })); },
+    async add(uid, rows) { db.transaction(() => rows.forEach((e) => ins.run(uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null)))(); },
   };
 }
 
@@ -100,8 +104,14 @@ export const auth = betterAuth({
       sendOnSignIn: true, // bestehende Konten ohne Bestätigung bekommen beim Anmelden einen neuen Link
       autoSignInAfterVerification: true,
       // Willkommens-Mail, sobald die Adresse bestätigt ist (E-Mail-Registrierung)
-      afterEmailVerification: async (user) => { void sendMail({ to: user, ...welcomeMail(user, baseURL) }); },
-      sendVerificationEmail: async ({ user, url }) => { void sendMail({ to: user, ...verifyEmailMail(user, url) }); },
+      // (nicht, wenn nur eine geänderte E-Mail-Adresse bestätigt wurde)
+      afterEmailVerification: async (user, request) => { if (!isEmailChangeRequest(request)) void sendMail({ to: user, ...welcomeMail(user, baseURL) }); },
+      // Bei einer Adressänderung ist user.email die NEUE Adresse (die gespeicherte ist noch die alte) – die Mail geht an die neue Adresse
+      sendVerificationEmail: async ({ user, url }) => {
+        const stored = (await sql.all('SELECT email FROM "user" WHERE id = ?', [user.id]))[0]?.email;
+        const changing = stored != null && stored.toLowerCase() !== user.email.toLowerCase();
+        void sendMail({ to: user, ...(changing ? changeEmailMail(user, url) : verifyEmailMail(user, url)) });
+      },
     },
   } : {}),
   // GitHub-Konten sind bei der Registrierung schon bestätigt: Willkommens-Mail direkt beim Anlegen
@@ -111,6 +121,8 @@ export const auth = betterAuth({
     },
   } : {}),
   user: {
+    // E-Mail ändern: Bestätigungslink an die neue Adresse; erst nach dem Klick gilt sie. Ohne Mailversand nicht möglich.
+    changeEmail: { enabled: mailEnabled },
     deleteUser: {
       enabled: true,
       afterDelete: async (deletedUser) => {

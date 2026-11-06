@@ -91,34 +91,75 @@ const DAY_MS = 24 * 60 * 60_000;
 
 export const randomSeed = () => randomInt(1, 1_000_000_000); // passt in INTEGER (auch Postgres int4)
 
-/** Prüft die Eingaben der Gruppenleitung → { test } oder { error }. Startzeit: höchstens 24 h zurück (= sofort), höchstens 2 Jahre voraus. */
+/**
+ * Gemeinsame Prüfung der Testfelder. startsAt: höchstens 24 h zurück (= sofort), höchstens 2 Jahre voraus (nur wenn checkStart).
+ * endsAt (optional, null = offen): muss nach der Startzeit liegen; beim Planen zusätzlich in der Zukunft.
+ */
+function validateTest(f, { now, checkStart, futureEnd }) {
+  if (!f.title || !TEST_KINDS.includes(f.kind) || !Number.isInteger(f.minutes) || f.minutes < 1 || f.minutes > 120 || !Number.isSafeInteger(f.startsAt)) return 'invalid_test';
+  if (!Number.isInteger(f.count) || f.count < MIN_TEST_COUNT || f.count > MAX_TEST_COUNT || !TEST_DIFFICULTIES.includes(f.difficulty)) return 'invalid_test';
+  if (checkStart && (f.startsAt < now - DAY_MS || f.startsAt > now + 730 * DAY_MS)) return 'invalid_time';
+  if (f.endsAt !== null) {
+    if (!Number.isSafeInteger(f.endsAt) || f.endsAt <= f.startsAt || f.endsAt > f.startsAt + 730 * DAY_MS || (futureEnd && f.endsAt <= now)) return 'invalid_end';
+  }
+  return null;
+}
+const endValue = (value) => (value == null || value === '' ? null : Number(value));
+
+/** Prüft die Eingaben der Gruppenleitung → { test } oder { error }. */
 export function parseTestInput(body, now = Date.now(), seed = randomSeed()) {
-  const title = String(body?.title ?? '').trim().slice(0, 80);
-  const kind = body?.kind;
-  const minutes = Number(body?.minutes);
-  const startsAt = Number(body?.startsAt);
-  const count = body?.count == null ? DEFAULT_TEST_COUNT : Number(body.count);
-  const difficulty = body?.difficulty == null ? 'gemischt' : body.difficulty;
-  if (!title || !TEST_KINDS.includes(kind) || !Number.isInteger(minutes) || minutes < 1 || minutes > 120 || !Number.isSafeInteger(startsAt)) return { error: 'invalid_test' };
-  if (!Number.isInteger(count) || count < MIN_TEST_COUNT || count > MAX_TEST_COUNT || !TEST_DIFFICULTIES.includes(difficulty)) return { error: 'invalid_test' };
-  if (startsAt < now - DAY_MS || startsAt > now + 730 * DAY_MS) return { error: 'invalid_time' };
-  return { test: { title, kind, minutes, count, difficulty, startsAt, seed } };
+  const test = {
+    title: String(body?.title ?? '').trim().slice(0, 80),
+    kind: body?.kind,
+    minutes: Number(body?.minutes),
+    count: body?.count == null ? DEFAULT_TEST_COUNT : Number(body.count),
+    difficulty: body?.difficulty == null ? 'gemischt' : body.difficulty,
+    startsAt: Number(body?.startsAt),
+    endsAt: endValue(body?.endsAt),
+  };
+  const error = validateTest(test, { now, checkStart: true, futureEnd: true });
+  return error ? { error } : { test: { ...test, seed } };
+}
+
+/**
+ * Änderung eines geplanten Tests → { patch } (vollständige neue Werte) oder { error }.
+ * Titel, Zeit pro Subtest und Endzeit lassen sich immer ändern. Aufgabenzahl, Schwierigkeit und Startzeit bestimmen, welche Aufgaben es gibt
+ * und welche Ergebnisse zählen – sie sind gesperrt, sobald es Ergebnisse gibt (hasResults), damit niemand nachträglich anders bewertet wird.
+ * Eine Endzeit in der Vergangenheit ist erlaubt (= Test jetzt beenden).
+ */
+export function parseTestUpdate(existing, body, { now = Date.now(), hasResults = false } = {}) {
+  const has = (key) => body != null && Object.hasOwn(body, key);
+  const next = {
+    title: has('title') ? String(body.title ?? '').trim().slice(0, 80) : existing.title,
+    kind: existing.kind,
+    minutes: has('minutes') ? Number(body.minutes) : existing.minutes,
+    count: has('count') ? Number(body.count) : existing.count ?? DEFAULT_TEST_COUNT,
+    difficulty: has('difficulty') ? body.difficulty : existing.difficulty ?? 'gemischt',
+    startsAt: has('startsAt') ? Number(body.startsAt) : existing.startsAt,
+    endsAt: has('endsAt') ? endValue(body.endsAt) : existing.endsAt ?? null,
+  };
+  const startChanged = next.startsAt !== existing.startsAt;
+  const error = validateTest(next, { now, checkStart: startChanged, futureEnd: false });
+  if (error) return { error };
+  if (hasResults && (startChanged || next.count !== (existing.count ?? DEFAULT_TEST_COUNT) || next.difficulty !== (existing.difficulty ?? 'gemischt'))) return { error: 'has_results' };
+  return { patch: next };
 }
 
 /** Was ein Nutzer von einem Test sehen darf: Der Seed (= die Aufgaben) wird erst ab der Startzeit herausgegeben – nur die Gruppenleitung kennt ihn vorher. */
 export function shapeTest(test, { owner = false, now = Date.now() } = {}) {
   const released = test.startsAt <= now;
-  const out = { id: test.id, title: test.title, kind: test.kind, minutes: test.minutes, count: test.count ?? DEFAULT_TEST_COUNT, difficulty: test.difficulty ?? 'gemischt', startsAt: test.startsAt, released };
+  const endsAt = test.endsAt ?? null;
+  const out = { id: test.id, title: test.title, kind: test.kind, minutes: test.minutes, count: test.count ?? DEFAULT_TEST_COUNT, difficulty: test.difficulty ?? 'gemischt', startsAt: test.startsAt, endsAt, ended: endsAt !== null && endsAt <= now, released };
   if (released || owner) out.seed = test.seed;
   return out;
 }
 
-/** Ergebnis eines Teilnehmers: je Subtest zählt der erste Prüfungsversuch mit dem Seed des Tests ab der Startzeit. */
+/** Ergebnis eines Teilnehmers: je Subtest zählt der erste Prüfungsversuch mit dem Seed des Tests ab der Startzeit (und, falls gesetzt, bis zur Endzeit). */
 export function testResult(test, entries) {
   const types = test.kind === 'all' ? TYPE_KEYS : [test.kind];
   const parts = {};
   for (const e of [...entries].sort((a, b) => a.ts - b.ts)) {
-    if (e.mode !== 'exam' || Number(e.seed) !== test.seed || e.ts < test.startsAt || !types.includes(e.type) || parts[e.type]) continue;
+    if (e.mode !== 'exam' || Number(e.seed) !== test.seed || e.ts < test.startsAt || (test.endsAt != null && e.ts > Number(test.endsAt)) || !types.includes(e.type) || parts[e.type]) continue;
     parts[e.type] = { correct: e.correct, total: e.total, seconds: e.seconds ?? null, ts: e.ts };
   }
   const list = Object.values(parts);
@@ -133,6 +174,50 @@ export function completedCount(test, entries) {
   const byUser = new Map();
   for (const e of entries) (byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)).push(e);
   return [...byUser.values()].filter((list) => testResult(test, list).complete).length;
+}
+
+/** CSV der Testergebnisse (eine Zeile je Mitglied): Name, Subtests, Gesamtergebnis, Zeit und je Subtest Richtig/Gesamt/Sekunden. members: [{ name, email, result }] */
+export function testResultsCsv(test, members) {
+  const types = test.kind === 'all' ? TYPE_KEYS : [test.kind];
+  const header = ['Name', 'E-Mail', 'Subtests abgeschlossen', 'Subtests gesamt', 'Richtig', 'Gesamt', 'Prozent', 'Zeit (Sekunden)',
+    ...types.flatMap((t) => [`${t} richtig`, `${t} gesamt`, `${t} Sekunden`])];
+  const rows = members.map(({ name, email, result: r }) => [
+    name, email, r.done, r.expected, r.done ? r.correct : null, r.done ? r.total : null, r.percent, r.done ? r.seconds : null,
+    ...types.flatMap((t) => { const p = r.parts[t]; return p ? [p.correct, p.total, p.seconds] : [null, null, null]; }),
+  ]);
+  return toCsv(header, rows);
+}
+
+/* ---------- Details eines Verlaufseintrags (Antworten je Aufgabe, für die Detailansicht im Verlauf) */
+const DETAIL_MAX_ITEMS = 100;
+const DETAIL_MAX_CHARS = 12_000;
+const DETAIL_LEVELS = ['niedrig', 'mittel', 'hoch'];
+// Antworten: null (unbeantwortet), Zahl (Gleichungen), Buchstabe A–E (Quadrate) oder [Bild 1, Bild 2] mit je null oder 1–9 (Figurale Sequenzen)
+const answerOk = (x) => x === null
+  || (typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1e6)
+  || (typeof x === 'string' && /^[A-E]$/.test(x))
+  || (Array.isArray(x) && x.length === 2 && x.every((v) => v === null || (Number.isInteger(v) && v >= 1 && v <= 9)));
+const answersOk = (list, n) => Array.isArray(list) && list.length === n && list.every(answerOk);
+
+/**
+ * Prüft die Details eines Verlaufseintrags (vom Client geliefert) → bereinigtes Objekt oder null.
+ * Prüfung: { n: Aufgabenzahl, d: Schwierigkeit, a: Antworten[], c: richtige Antworten[] } (Aufgaben ergeben sich aus Seed, n und d)
+ * Übung:   { t: [{ s: Aufgaben-Seed, l: Stufe, a: Antwort, c: richtige Antwort }] }
+ */
+export function cleanDetail(detail, { mode, total } = {}) {
+  if (detail == null || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  let out = null;
+  if (mode === 'exam') {
+    const { n, d, a, c } = detail;
+    if (Number.isInteger(n) && n === total && n >= 1 && n <= DETAIL_MAX_ITEMS && TEST_DIFFICULTIES.includes(d) && answersOk(a, n) && answersOk(c, n) && !c.includes(null)) out = { n, d, a, c };
+  } else if (mode === 'practice') {
+    const { t } = detail;
+    if (Array.isArray(t) && t.length === total && t.length >= 1 && t.length <= DETAIL_MAX_ITEMS
+      && t.every((x) => x && Number.isSafeInteger(x.s) && DETAIL_LEVELS.includes(x.l) && answerOk(x.a) && answerOk(x.c) && x.c !== null)) {
+      out = { t: t.map((x) => ({ s: x.s, l: x.l, a: x.a, c: x.c })) };
+    }
+  }
+  return out && JSON.stringify(out).length <= DETAIL_MAX_CHARS ? out : null;
 }
 
 /* ---------- Eigene Daten exportieren (Konto → Einstellungen) */
