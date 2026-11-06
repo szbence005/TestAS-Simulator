@@ -21,6 +21,7 @@ export async function ensureGroupTables() {
 
 const num = (x) => (x == null ? x : Number(x)); // BIGINT/COUNT kommen aus Postgres als String
 const ID = /^[\w-]{1,64}$/;
+const ACTIONS = new Set(['created', 'create', 'leave', 'preview', 'join']); // feste Aktionen, keine Gruppen-IDs
 
 // Code-Raten bremsen: höchstens 8 falsche Codes pro Nutzer in 15 Minuten
 const misses = new Map();
@@ -192,7 +193,7 @@ export async function groupsApi(req, res, pathname, ctx) {
 
   if (area === 'groups') {
     if (a === 'created' && method === 'GET') return send(res, 200, { groups: await db.created(user.id) });
-    if (a && ID.test(a)) {
+    if (a && !ACTIONS.has(a) && ID.test(a)) {
       if (!(await db.isOwner(a, user.id))) return send(res, 403, { error: 'forbidden' });
       const group = await db.group(a);
       if (!group) return send(res, 404, { error: 'not_found' });
