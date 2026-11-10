@@ -60,6 +60,10 @@ If the site runs on a static host (e.g. GitHub Pages), there is no auth server: 
 
 After signing in, use the **Prüfung**, **Üben**, and **Verlauf** navigation links to open each platform section as its own page. The profile avatar at the right opens **Kontoinformationen** and **Einstellungen**. Settings include display-name and password updates, sign-out, and permanent account deletion; the email address can be changed when email sending is configured (a confirmation link goes to the new address; it only takes effect after the click), otherwise it is read-only.
 
+## Interrupted exams
+
+A running exam is saved in the browser (answers, flags, position, start time of each subtest). If the page is reloaded, the tab is closed or the browser crashes, the exam is restored on the next visit: while time is left it continues with the remaining time; if the time ran out in the meantime, the subtest is submitted automatically with the answers given so far (time = full limit), evaluated and saved to the history – as if the page had stayed open. Subtests that were never started are not counted; after a pause of more than 6 hours they are not offered any more. The state is cleared on sign-out.
+
 ## Result details in *Verlauf*
 
 Results saved from now on carry the answers per task. In **Verlauf**, a *Details* button opens the full review: every task with your answer, the correct answer and the explanation, with an optional filter for wrong/unanswered tasks. Exam tasks are rebuilt from seed + task count + difficulty; practice tasks get their own seed. The stored correct answer is compared with the rebuilt task, so if the generators change later the task is simply not shown (answer and solution remain visible). Older results have no details. The server stores them in a new `detail` column of `history` (validated, max. 100 tasks, ≤ 12 kB per entry).

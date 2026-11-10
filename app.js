@@ -13,6 +13,8 @@ applyTheme();
 const app = document.getElementById('app');
 const isSEB = /SEB/i.test(navigator.userAgent);
 const HISTORY_KEY = 'testas-sim-history-v1';
+const EXAM_STATE_KEY = 'testas-sim-exam-state-v1';   // laufende Prüfung (überlebt Neuladen, Tab-Schließen, Absturz)
+const ABANDON_MS = 6 * 3_600_000;                    // nach so langer Pause werden noch nicht begonnene Subtests nicht mehr angeboten
 
 const store = {
   get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } },
@@ -390,7 +392,7 @@ function startExam(kind, seed, minutes = EXAM.minutes, groupId = null, options =
   app.innerHTML = '<p class="card">Aufgaben werden erstellt …</p>';
   setTimeout(() => {
     S = {
-      seed: useSeed, si: 0, groupId, difficulty: options.difficulty ?? 'gemischt',
+      seed: useSeed, si: 0, groupId, options, difficulty: options.difficulty ?? 'gemischt',
       sections: types.map((type) => {
         const tasks = buildExamSet(type, useSeed, options);
         return { type, tasks, answers: Array(tasks.length).fill(null), flags: Array(tasks.length).fill(false), i: 0, startedAt: null, endedAt: null, minutes, limitMs: minutes * 60000 };
@@ -398,6 +400,64 @@ function startExam(kind, seed, minutes = EXAM.minutes, groupId = null, options =
     };
     renderIntro();
   }, 30);
+}
+
+/* ---- Laufende Prüfung speichern und wiederherstellen
+
+   Der Zustand liegt nur im Speicher der Seite. Ohne Speicherung ginge bei Neuladen, geschlossenem Tab oder Absturz alles verloren –
+   und bei abgelaufener Zeit gäbe es nie ein Ergebnis. Darum wird der Stand bei jeder Änderung gesichert; beim nächsten Laden wird ein
+   abgelaufener Subtest mit den bis dahin gegebenen Antworten automatisch abgegeben und ausgewertet. */
+function saveExamState() {
+  if (!S || !user) return;
+  store.set(EXAM_STATE_KEY, {
+    v: 1, uid: user.id, savedAt: Date.now(), seed: S.seed, groupId: S.groupId, options: S.options, difficulty: S.difficulty, si: S.si,
+    sections: S.sections.map((x) => ({ type: x.type, minutes: x.minutes, i: x.i, startedAt: x.startedAt, endedAt: x.endedAt, auto: Boolean(x.auto), answers: x.answers.map(plainAnswer), flags: x.flags })),
+  });
+}
+const clearExamState = () => { try { localStorage.removeItem(EXAM_STATE_KEY); } catch { /* ignorieren */ } };
+
+/** Gespeicherte Prüfung wiederherstellen → true, wenn etwas angezeigt wurde. */
+function resumeExam() {
+  const saved = store.get(EXAM_STATE_KEY, null);
+  if (!saved) return false;
+  const now = Date.now();
+  try {
+    if (saved.v !== 1 || saved.uid !== user?.id || !Array.isArray(saved.sections) || !saved.sections.length) throw new Error('fremd oder ungültig');
+    S = {
+      seed: saved.seed, si: saved.si, groupId: saved.groupId ?? null, options: saved.options ?? {}, difficulty: saved.difficulty ?? 'gemischt',
+      sections: saved.sections.map((x) => {
+        const tasks = buildExamSet(x.type, saved.seed, saved.options ?? {});
+        if (!Array.isArray(x.answers) || x.answers.length !== tasks.length) throw new Error('Aufgaben passen nicht');
+        const answers = x.answers.map((a) => safeAnswer(x.type, a));
+        return { type: x.type, tasks, answers, flags: tasks.map((_, k) => Boolean(x.flags?.[k])), i: Math.min(Math.max(x.i | 0, 0), tasks.length - 1),
+          startedAt: x.startedAt ?? null, endedAt: x.endedAt ?? null, auto: Boolean(x.auto), minutes: x.minutes, limitMs: x.minutes * 60000 };
+      }),
+    };
+    if (!(S.si >= 0 && S.si < S.sections.length)) throw new Error('ungültiger Subtest');
+  } catch { S = null; clearExamState(); return false; }
+
+  // Abgelaufene Subtests mit der Endzeit „Start + Zeitlimit“ abgeben (nicht mit der jetzigen Zeit)
+  for (const x of S.sections) {
+    if (x.startedAt != null && x.endedAt == null && now - x.startedAt >= x.limitMs) { x.endedAt = x.startedAt + x.limitMs; x.auto = true; }
+  }
+  const sec = S.sections[S.si];
+  const note = (text) => app.insertAdjacentHTML('afterbegin', `<p class="card" role="status">${text}</p>`);
+  if (sec.startedAt != null && sec.endedAt == null) {   // läuft noch: mit der Restzeit weitermachen
+    startTimer(); renderExam();
+    note('Deine Prüfung wurde wiederhergestellt. Die Zeit lief in der Zwischenzeit weiter.');
+  } else if (sec.endedAt != null) {                      // Zeit abgelaufen, während die Seite nicht offen war
+    const stale = now - saved.savedAt > ABANDON_MS;
+    if (S.si < S.sections.length - 1 && !stale) {
+      showBetween(sec.auto);
+      note('Die Zeit des vorigen Subtests ist abgelaufen, während die Seite nicht geöffnet war. Deine Antworten wurden automatisch abgegeben.');
+    } else {
+      renderResult();
+      note('Die Zeit ist abgelaufen, während die Seite nicht geöffnet war. Deine Antworten wurden automatisch abgegeben.');
+    }
+  } else if (now - saved.savedAt > ABANDON_MS) {         // nie gestartet und lange her: verwerfen
+    S = null; clearExamState(); return false;
+  } else { renderIntro(); note('Deine Prüfung wurde wiederhergestellt.'); }
+  return true;
 }
 
 const INSTRUCTIONS = {
@@ -411,29 +471,35 @@ const INSTRUCTIONS = {
 
 function renderIntro() {
   setScreen('intro');
+  saveExamState();
   const sec = S.sections[S.si];
   app.innerHTML = `<h1>${TYPES[sec.type].label}</h1><p class="muted">Subtest ${S.si + 1} von ${S.sections.length} ${badges()}</p>
     <section class="card">${INSTRUCTIONS[sec.type]}
       <p>Sie haben <b>${sec.tasks.length} Aufgaben</b> und <b>${sec.minutes} Minuten</b>. Arbeiten Sie so schnell und akkurat wie möglich. Wenn Sie eine Antwort nicht wissen, raten Sie. Sie dürfen sich keine Notizen machen.</p>
       <p class="muted">Tastatur: ← → blättern, bei Quadraten A–E wählen, bei Figuralen Sequenzen 1–3 (Bild 1) und 4–6 (Bild 2), bei Gleichungen Enter = weiter.</p>
       <p><button class="primary" id="go">Subtest starten</button> <button id="abort">Abbrechen</button></p></section>`;
-  document.getElementById('go').onclick = () => { sec.startedAt = Date.now(); startTimer(); renderExam(); };
-  document.getElementById('abort').onclick = () => { S = null; renderHome(); };
+  document.getElementById('go').onclick = () => { sec.startedAt = Date.now(); saveExamState(); startTimer(); renderExam(); };
+  document.getElementById('abort').onclick = () => { S = null; clearExamState(); renderHome(); };
 }
 
+function tickTimer() {
+  if (!S || screen !== 'exam') return;
+  const sec = S.sections[S.si];
+  const left = sec.limitMs - (Date.now() - sec.startedAt);
+  const el = document.getElementById('timer');
+  if (el) { el.textContent = fmt(left); el.classList.toggle('low', left < Math.min(5 * 60000, sec.limitMs / 5)); }
+  if (left <= 0) finishSection(true);
+}
 function startTimer() {
   clearInterval(timerId);
-  timerId = setInterval(() => {
-    const sec = S.sections[S.si];
-    const left = sec.limitMs - (Date.now() - sec.startedAt);
-    const el = document.getElementById('timer');
-    if (el) { el.textContent = fmt(left); el.classList.toggle('low', left < Math.min(5 * 60000, sec.limitMs / 5)); }
-    if (left <= 0) finishSection(true);
-  }, 250);
+  timerId = setInterval(tickTimer, 250);
 }
+// Beim Zurückkehren in den Tab (Handy entsperrt, Laptop aufgeklappt) sofort prüfen, ob die Zeit abgelaufen ist
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tickTimer(); });
 
 function renderExam() {
   setScreen('exam');
+  saveExamState();
   const sec = S.sections[S.si];
   const t = sec.tasks[sec.i];
   const left = sec.limitMs - (Date.now() - sec.startedAt);
@@ -453,13 +519,13 @@ function renderExam() {
   paintNav();
   document.getElementById('prev').onclick = () => go(sec.i - 1);
   document.getElementById('next').onclick = () => go(sec.i + 1);
-  document.getElementById('flag').onclick = () => { sec.flags[sec.i] = !sec.flags[sec.i]; document.getElementById('flag').textContent = sec.flags[sec.i] ? 'Markierung entfernen' : 'Markieren'; paintNav(); };
+  document.getElementById('flag').onclick = () => { sec.flags[sec.i] = !sec.flags[sec.i]; saveExamState(); document.getElementById('flag').textContent = sec.flags[sec.i] ? 'Markierung entfernen' : 'Markieren'; paintNav(); };
   document.getElementById('submit').onclick = () => {
     const open = sec.answers.filter((a) => !answered(a)).length;
     if (confirm(open ? `Noch ${open} Aufgabe(n) unbeantwortet. Subtest wirklich abgeben?` : 'Subtest jetzt abgeben?')) finishSection(false);
   };
   document.getElementById('nav').onclick = (e) => { const b = e.target.closest('button[data-k]'); if (b) go(Number(b.dataset.k)); };
-  bindTask(t, (a) => { sec.answers[sec.i] = a; paintNav(); }, () => go(sec.i + 1));
+  bindTask(t, (a) => { sec.answers[sec.i] = a; saveExamState(); paintNav(); }, () => go(sec.i + 1));
 }
 
 function paintNav() {
@@ -482,13 +548,17 @@ function finishSection(auto) {
   const sec = S.sections[S.si];
   sec.endedAt = Date.now();
   sec.auto = auto;
-  if (S.si < S.sections.length - 1) {
-    setScreen('between');
-    app.innerHTML = `<section class="card"><h1>Subtest beendet</h1>
-      <p>${auto ? 'Die Zeit ist abgelaufen.' : 'Abgegeben.'} Es folgt der nächste Subtest: <b>${TYPES[S.sections[S.si + 1].type].label}</b>.</p>
-      <p><button class="primary" id="cont">Weiter</button></p></section>`;
-    document.getElementById('cont').onclick = () => { S.si++; renderIntro(); };
-  } else renderResult();
+  saveExamState();
+  if (S.si < S.sections.length - 1) showBetween(auto);
+  else renderResult();
+}
+
+function showBetween(auto) {
+  setScreen('between');
+  app.innerHTML = `<section class="card"><h1>Subtest beendet</h1>
+    <p>${auto ? 'Die Zeit ist abgelaufen.' : 'Abgegeben.'} Es folgt der nächste Subtest: <b>${TYPES[S.sections[S.si + 1].type].label}</b>.</p>
+    <p><button class="primary" id="cont">Weiter</button></p></section>`;
+  document.getElementById('cont').onclick = () => { S.si++; renderIntro(); };
 }
 
 /* ------------------------------------------------------------------ Ergebnis */
@@ -497,12 +567,13 @@ function renderResult() {
   const history = store.get(HISTORY_KEY, []);
   const fresh = [];
   let html = `<h1>Ergebnis</h1><p class="muted">Seed ${S.seed} – mit diesem Seed erhalten Sie dieselben Aufgaben noch einmal. ${badges()}</p>`;
-  for (const sec of S.sections) {
+  for (const sec of S.sections.filter((x) => x.startedAt != null)) {   // nie begonnene Subtests (Prüfung abgebrochen) zählen nicht
     const correct = sec.tasks.filter((t, k) => same(sec.answers[k], t.answer)).length;
     const seconds = Math.min(Math.round((sec.endedAt - sec.startedAt) / 1000), sec.limitMs / 1000);
     // Details für die Verlaufs-Detailansicht: Die Aufgaben ergeben sich aus Seed, Anzahl und Schwierigkeit; gespeichert werden Antworten und Lösungen
     const detail = { n: sec.tasks.length, d: S.difficulty, a: sec.answers.map(plainAnswer), c: sec.tasks.map((t) => t.answer) };
     const entry = { ts: Date.now(), mode: 'exam', type: sec.type, correct, total: sec.tasks.length, seconds, seed: S.seed, detail };
+    entry.ts = sec.endedAt ?? entry.ts;   // Abgabezeit (bei automatischer Abgabe nach dem Neuladen: das Ende der Zeit)
     history.unshift(entry);
     fresh.push(entry);
     const byLevel = LEVELS.map((l) => {
@@ -517,6 +588,7 @@ function renderResult() {
       ${reviewHTML(sec.tasks.map((t, k) => ({ id: t.id, level: t.level, answer: sec.answers[k], correct: t.answer, task: t })))}</section>`;
   }
   store.set(HISTORY_KEY, history.slice(0, 50));
+  clearExamState();
   if (user) Auth.pushHistory(fresh);
   const groupId = S.groupId;
   html += `<p><button class="primary" id="home">Zur Startseite</button>${groupId ? ' <button id="to-group">Zur Lerngruppe</button>' : ''}</p>`;
@@ -711,6 +783,7 @@ async function logout() {
   S = null;
   P = null;
   clearInterval(timerId);
+  clearExamState();
   localStorage.removeItem(HISTORY_KEY); // auf geteilten Geräten keinen fremden Verlauf zurücklassen (liegt auf dem Server)
   renderAuthSlot();
   renderHome();
@@ -861,6 +934,7 @@ Auth.getSession().then(async (s) => {
   await loadAccount();
   renderAuthSlot();
   await syncHistory();
+  if (resumeExam()) { window.history.replaceState(null, '', location.pathname); return; }   // laufende Prüfung hat Vorrang vor einem Gruppentest-Link
   renderHome();
   await openFromLocation();
 });
