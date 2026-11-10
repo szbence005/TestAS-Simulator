@@ -2,10 +2,10 @@
 import { randomUUID } from 'node:crypto';
 import { sql, baseURL } from './auth.js';
 import { mailEnabled, sendMail, newTestMail } from './mail.js';
-import { TYPE_KEYS, historyCsv, accountExport, generateCode, normalizeCode, formatCode, parseAdminEmails, summarize, countExams, percent, toCsv, utc, parseTestInput, parseTestUpdate, testResultsCsv, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
+import { TYPE_KEYS, historyCsv, accountExport, generateCode, normalizeCode, formatCode, parseAdminEmails, adminAllowed, summarize, countExams, percent, toCsv, utc, parseTestInput, parseTestUpdate, testResultsCsv, shapeTest, testResult, completedCount, MAX_TESTS_PER_GROUP } from './stats.js';
 
 const adminEmails = parseAdminEmails(process.env.ADMIN_EMAILS);
-export const isAdmin = (user) => Boolean(user?.email) && adminEmails.has(user.email.toLowerCase());
+export const isAdmin = (user) => adminAllowed(user, adminEmails);
 if (!adminEmails.size) console.warn('ADMIN_EMAILS ist nicht gesetzt – es gibt keinen Admin.');
 
 export async function ensureGroupTables() {
@@ -98,7 +98,7 @@ const db = {
   removeTest: (gid, tid) => sql.run('DELETE FROM group_tests WHERE group_id = ? AND id = ?', [gid, tid]),
   // Prüfungsergebnisse der aktuellen Gruppenmitglieder mit einem der Seeds (Grundlage für die Auswertung der Tests)
   examEntries: async (gid, seeds) => (!seeds.length ? [] : (await sql.all(
-    `SELECT user_id, ts, mode, type, correct, total, seconds, seed FROM history
+    `SELECT user_id, ts, mode, type, correct, total, seconds, seed, verified, exam_count, exam_difficulty FROM history
      WHERE mode = 'exam' AND seed IN (${seeds.map(() => '?').join(', ')})
        AND user_id IN (SELECT user_id FROM study_group_members WHERE group_id = ?) ORDER BY ts`, [...seeds, gid])).map((e) => ({ ...e, ts: num(e.ts) }))),
   remove: async (gid) => {

@@ -245,3 +245,44 @@ test('Verlaufsdetails: gültige Prüfungs- und Übungsdetails werden übernommen
   bad('text', { mode: 'exam', total: 1 }); bad(null, { mode: 'exam', total: 1 }); bad([], { mode: 'exam', total: 1 });
   bad(practice, { mode: 'exam', total: 2 });
 });
+
+/* ---------- Ergebnisse serverseitig nachrechnen, Admin nur mit bestätigter Adresse */
+import { verifyExamEntry, adminAllowed } from '../server/stats.js';
+import { buildExamSet } from '../src/tasks.js';
+
+test('Prüfung wird serverseitig nachgerechnet: die Behauptung des Clients zählt nicht', () => {
+  const tasks = buildExamSet('gleichungen', 123, { count: 5, difficulty: 'mittel' });
+  const c = tasks.map((t) => t.answer);
+  const a = [c[0], c[1], c[2], null, c[4] + 1];                                  // 3 richtig, 1 leer, 1 falsch
+  const entry = { mode: 'exam', type: 'gleichungen', seed: 123, correct: 5, total: 5, detail: { n: 5, d: 'mittel', a, c } }; // behauptet 5/5
+  assert.deepEqual(verifyExamEntry(entry), { correct: 3, total: 5, count: 5, difficulty: 'mittel' });
+  const bad = (e) => assert.equal(verifyExamEntry(e), null);
+  bad({ ...entry, detail: undefined });                                          // ohne Details nicht prüfbar
+  bad({ ...entry, detail: { ...entry.detail, c: c.map((x) => x + 1) } });        // gefälschte Lösungen
+  bad({ ...entry, detail: { ...entry.detail, d: 'hoch' } });                     // andere Aufgaben als zum Seed gehören
+  bad({ ...entry, seed: 124 });
+  bad({ ...entry, seed: null });
+  bad({ ...entry, mode: 'practice' });
+  bad({ ...entry, type: 'unbekannt' });
+});
+
+test('Gruppentest wertet nur nachgerechnete Ergebnisse mit passender Aufgabenzahl und Schwierigkeit', () => {
+  const t = { ...T, kind: 'figural', count: 20, difficulty: 'gemischt' };
+  const good = { ...ex('u', NOW + 1, 'figural', 10, 20, 4711, 100), verified: 1, exam_count: 20, exam_difficulty: 'gemischt' };
+  assert.equal(testResult(t, [good]).done, 1);
+  assert.equal(testResult(t, [{ ...good, verified: 0 }]).done, 0);               // nicht nachgerechnet (z. B. gefälscht)
+  assert.equal(testResult(t, [{ ...good, exam_count: 1 }]).done, 0);             // Prüfung mit nur 1 Aufgabe zum selben Seed
+  assert.equal(testResult(t, [{ ...good, exam_difficulty: 'niedrig' }]).done, 0);
+  assert.equal(testResult(t, [ex('u', NOW + 1, 'figural', 10, 20, 4711, 100)]).done, 1); // ältere Zeilen ohne diese Angaben zählen weiter
+  // eine abgelehnte Zeile blockiert nicht den späteren echten Versuch
+  assert.equal(testResult(t, [{ ...good, ts: NOW + 1, verified: 0 }, { ...good, ts: NOW + 2 }]).done, 1);
+});
+
+test('Admin nur mit bestätigter E-Mail-Adresse', () => {
+  const admins = new Set(['chef@x.de']);
+  assert.equal(adminAllowed({ email: 'Chef@x.de', emailVerified: true }, admins), true);
+  assert.equal(adminAllowed({ email: 'chef@x.de', emailVerified: false }, admins), false);   // nur registriert, nie bestätigt
+  assert.equal(adminAllowed({ email: 'chef@x.de' }, admins), false);
+  assert.equal(adminAllowed({ email: 'anderer@x.de', emailVerified: true }, admins), false);
+  assert.equal(adminAllowed(null, admins), false);
+});

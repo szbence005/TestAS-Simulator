@@ -60,6 +60,11 @@ If the site runs on a static host (e.g. GitHub Pages), there is no auth server: 
 
 After signing in, use the **Prüfung**, **Üben**, and **Verlauf** navigation links to open each platform section as its own page. The profile avatar at the right opens **Kontoinformationen** and **Einstellungen**. Settings include display-name and password updates, sign-out, and permanent account deletion; the email address can be changed when email sending is configured (a confirmation link goes to the new address; it only takes effect after the click), otherwise it is read-only.
 
+## Integrity of results and admin access
+
+- **Exam results are recomputed on the server.** The client sends its answers; the server rebuilds the tasks from seed + task count + difficulty (the generators in `src/` are plain ES modules and run in Node) and counts the correct answers itself, so a claimed score is ignored. Exam entries without valid details, or whose solutions do not match, are stored (they stay in the user's own history) but are **not counted in group tests** (`history.verified = 0`). Group tests also only count results with the test's own task count and difficulty. Rows that existed before this check stay valid. Limits: someone who generates the tasks locally can still know the answers, and time and timestamps are reported by the client. Only up to 6 exam entries per request are recomputed (CPU).
+- **Admin needs a verified email address** (`ADMIN_EMAILS` + confirmed address). Without a working mail setup, email/password accounts are therefore never admin – sign in with GitHub (its addresses are verified) or configure email.
+
 ## Interrupted exams
 
 A running exam is saved in the browser (answers, flags, position, start time of each subtest). If the page is reloaded, the tab is closed or the browser crashes, the exam is restored on the next visit: while time is left it continues with the remaining time; if the time ran out in the meantime, the subtest is submitted automatically with the answers given so far (time = full limit), evaluated and saved to the history – as if the page had stayed open. Subtests that were never started are not counted; after a pause of more than 6 hours they are not offered any more. The state is cleared on sign-out.

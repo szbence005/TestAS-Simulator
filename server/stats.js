@@ -1,5 +1,6 @@
 // Reine Hilfsfunktionen (ohne Datenbank, gut testbar): Gruppencodes, Admin-Liste, Statistik, CSV.
 import { randomInt } from 'node:crypto';
+import { buildExamSet } from '../src/tasks.js';
 
 export const TYPE_KEYS = ['figural', 'gleichungen', 'quadrate'];
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // ohne 0/O, 1/I/L
@@ -160,6 +161,9 @@ export function testResult(test, entries) {
   const parts = {};
   for (const e of [...entries].sort((a, b) => a.ts - b.ts)) {
     if (e.mode !== 'exam' || Number(e.seed) !== test.seed || e.ts < test.startsAt || (test.endsAt != null && e.ts > Number(test.endsAt)) || !types.includes(e.type) || parts[e.type]) continue;
+    // Nicht nachgerechnete Ergebnisse (verified = 0) und Ergebnisse mit anderer Aufgabenzahl/Schwierigkeit zählen nicht; ältere Zeilen ohne diese Angaben schon
+    if (e.verified != null && Number(e.verified) === 0) continue;
+    if (e.exam_count != null && (Number(e.exam_count) !== (test.count ?? DEFAULT_TEST_COUNT) || e.exam_difficulty !== (test.difficulty ?? 'gemischt'))) continue;
     parts[e.type] = { correct: e.correct, total: e.total, seconds: e.seconds ?? null, ts: e.ts };
   }
   const list = Object.values(parts);
@@ -219,6 +223,26 @@ export function cleanDetail(detail, { mode, total } = {}) {
   }
   return out && JSON.stringify(out).length <= DETAIL_MAX_CHARS ? out : null;
 }
+
+/**
+ * Prüfungsergebnis serverseitig nachrechnen. Der Client meldet nur Antworten (detail); Aufgaben und Lösungen erzeugt der Server selbst
+ * aus Seed, Anzahl und Schwierigkeit. Die Zahl der richtigen Antworten stammt aus dieser Rechnung, nicht aus der Behauptung des Clients.
+ * → { correct, total, count, difficulty } oder null (kein/ungültiges detail, oder die mitgeschickten Lösungen passen nicht zu den Aufgaben).
+ * Grenze: Wer die Aufgaben selbst erzeugt, kann die richtigen Antworten kennen – Zeit und Zeitstempel bleiben Angaben des Clients.
+ */
+export function verifyExamEntry(e) {
+  const d = e?.detail;
+  if (e?.mode !== 'exam' || !Number.isSafeInteger(e.seed) || !d || !Number.isInteger(d.n)) return null;
+  let tasks;
+  try { tasks = buildExamSet(e.type, e.seed, { count: d.n, difficulty: d.d }); } catch { return null; }
+  if (tasks.length !== d.n || tasks.some((t, k) => JSON.stringify(t.answer) !== JSON.stringify(d.c[k]))) return null;
+  // gleicher Vergleich wie im Client (app.js: same)
+  const same = (a, b) => a !== null && a !== undefined && String(a) === String(b);
+  return { correct: tasks.filter((t, k) => same(d.a[k], t.answer)).length, total: d.n, count: d.n, difficulty: d.d };
+}
+
+/** Admin nur mit bestätigter E-Mail-Adresse – sonst könnte sich jeder mit der Adresse eines Admins registrieren. */
+export const adminAllowed = (user, admins) => Boolean(user?.email) && user.emailVerified === true && admins.has(user.email.toLowerCase());
 
 /* ---------- Eigene Daten exportieren (Konto → Einstellungen) */
 export const HISTORY_CSV_HEADER = ['Zeit (UTC)', 'Modus', 'Typ', 'Richtig', 'Gesamt', 'Prozent', 'Sekunden', 'Seed'];

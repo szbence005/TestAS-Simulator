@@ -16,7 +16,8 @@ try {
   console.error('Better Auth konnte nicht geladen werden. Bitte zuerst "npm install" ausführen.\n', err.message);
   process.exit(1);
 }
-const { cleanDetail } = await import('./stats.js');
+const { cleanDetail, verifyExamEntry } = await import('./stats.js');
+const MAX_VERIFIED_PER_REQUEST = 6;   // Nachrechnen kostet Rechenzeit (v. a. Figurale Sequenzen); eine Prüfung sind höchstens 3 Einträge
 const { auth, history, githubEnabled, mailEnabled, toNodeHandler, fromNodeHeaders, groupsApi, ensureGroupTables } = mods;
 
 // Datenbanktabellen von Better Auth anlegen (user, session, account, verification).
@@ -79,9 +80,18 @@ async function historyApi(req, res) {
     if (!Array.isArray(entries) || entries.length > 100) return send(res, 400, { error: 'invalid' });
     const rows = entries.filter((e) => e && int(e.ts) && MODES.has(e.mode) && TYPES.has(e.type)
       && int(e.correct) && int(e.total) && e.correct >= 0 && e.correct <= e.total && e.total <= 100
-      && (e.seconds == null || int(e.seconds)) && (e.seed == null || int(e.seed)));
-    // Details (Antworten je Aufgabe) sind optional; ungültige werden verworfen, der Eintrag selbst bleibt erhalten
-    await history.add(uid, rows.map((e) => ({ ...e, detail: cleanDetail(e.detail, e) })));
+      && (e.seconds == null || (int(e.seconds) && e.seconds >= 0 && e.seconds <= 7200)) && (e.seed == null || int(e.seed)));
+    // Details (Antworten je Aufgabe) sind optional; ungültige werden verworfen, der Eintrag selbst bleibt erhalten.
+    // Prüfungen werden serverseitig nachgerechnet: Die Zahl der richtigen Antworten kommt aus Seed + Antworten, nicht vom Client.
+    // Prüfungen ohne gültige Details (oder mit falschen Lösungen) werden gespeichert, aber nicht für Gruppentests gewertet (verified = 0).
+    let budget = MAX_VERIFIED_PER_REQUEST;
+    const prepared = rows.map((e) => {
+      const detail = cleanDetail(e.detail, e);
+      if (e.mode !== 'exam') return { ...e, detail };
+      const v = detail && budget-- > 0 ? verifyExamEntry({ ...e, detail }) : null;
+      return v ? { ...e, detail, correct: v.correct, total: v.total, verified: 1, examCount: v.count, examDifficulty: v.difficulty } : { ...e, detail, verified: 0 };
+    });
+    await history.add(uid, prepared);
     return send(res, 200, { saved: rows.length });
   }
   return send(res, 405, { error: 'method' });

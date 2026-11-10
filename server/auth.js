@@ -7,6 +7,9 @@ import { mailEnabled, sendMail, verifyEmailMail, changeEmailMail, isEmailChangeR
 
 const port = Number(process.env.PORT) || 8080;
 const COLS = 'ts, mode, type, correct, total, seconds, seed, detail';
+// Spalten für die serverseitige Prüfung: verified (1 = nachgerechnet; ältere Zeilen gelten als geprüft), Aufgabenzahl und Schwierigkeit der Prüfung
+const CHECK_COLS = 'verified, exam_count, exam_difficulty';
+const checkValues = (e) => [e.verified ?? 1, e.examCount ?? null, e.examDifficulty ?? null];
 const parseDetail = (text) => { try { return text ? JSON.parse(text) : null; } catch { return null; } };
 
 let database;
@@ -21,6 +24,9 @@ if (process.env.DATABASE_URL) {
     correct INTEGER NOT NULL, total INTEGER NOT NULL, seconds INTEGER, seed INTEGER,
     PRIMARY KEY (user_id, ts, mode, type))`);
   await pool.query('ALTER TABLE history ADD COLUMN IF NOT EXISTS detail TEXT'); // Antworten je Aufgabe (JSON) für die Detailansicht
+  await pool.query('ALTER TABLE history ADD COLUMN IF NOT EXISTS verified INTEGER NOT NULL DEFAULT 1');
+  await pool.query('ALTER TABLE history ADD COLUMN IF NOT EXISTS exam_count INTEGER');
+  await pool.query('ALTER TABLE history ADD COLUMN IF NOT EXISTS exam_difficulty TEXT');
   database = pool;
   const toPg = (text) => { let i = 0; return text.replace(/\?/g, () => `$${++i}`); };
   sql = {
@@ -38,8 +44,8 @@ if (process.env.DATABASE_URL) {
       try {
         await c.query('BEGIN');
         for (const e of rows) {
-          await c.query(`INSERT INTO history (user_id, ${COLS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
-            [uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null]);
+          await c.query(`INSERT INTO history (user_id, ${COLS}, ${CHECK_COLS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,
+            [uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null, ...checkValues(e)]);
         }
         await c.query('COMMIT');
       } catch (err) { await c.query('ROLLBACK'); throw err; } finally { c.release(); }
@@ -55,10 +61,12 @@ if (process.env.DATABASE_URL) {
     user_id TEXT NOT NULL, ts INTEGER NOT NULL, mode TEXT NOT NULL, type TEXT NOT NULL,
     correct INTEGER NOT NULL, total INTEGER NOT NULL, seconds INTEGER, seed INTEGER,
     PRIMARY KEY (user_id, ts, mode, type))`);
-  try { db.exec('ALTER TABLE history ADD COLUMN detail TEXT'); } // Antworten je Aufgabe (JSON) für die Detailansicht
-  catch (error) { if (!/duplicate column name/i.test(error.message)) throw error; }
+  for (const column of ['detail TEXT', 'verified INTEGER NOT NULL DEFAULT 1', 'exam_count INTEGER', 'exam_difficulty TEXT']) {
+    try { db.exec(`ALTER TABLE history ADD COLUMN ${column}`); }
+    catch (error) { if (!/duplicate column name/i.test(error.message)) throw error; }
+  }
   const list = db.prepare(`SELECT ${COLS} FROM history WHERE user_id = ? ORDER BY ts DESC LIMIT 200`);
-  const ins = db.prepare(`INSERT OR IGNORE INTO history (user_id, ${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const ins = db.prepare(`INSERT OR IGNORE INTO history (user_id, ${COLS}, ${CHECK_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   database = db;
   sql = {
     bigint: 'INTEGER',
@@ -67,7 +75,7 @@ if (process.env.DATABASE_URL) {
   };
   history = {
     async list(uid) { return list.all(uid).map((x) => ({ ...x, detail: parseDetail(x.detail) })); },
-    async add(uid, rows) { db.transaction(() => rows.forEach((e) => ins.run(uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null)))(); },
+    async add(uid, rows) { db.transaction(() => rows.forEach((e) => ins.run(uid, e.ts, e.mode, e.type, e.correct, e.total, e.seconds ?? null, e.seed ?? null, e.detail ? JSON.stringify(e.detail) : null, ...checkValues(e))))(); },
   };
 }
 
